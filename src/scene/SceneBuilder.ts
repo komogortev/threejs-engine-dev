@@ -259,6 +259,8 @@ export class SceneBuilder {
         const ry = charDesc.rotationY ?? 0
         if (ry !== 0) root.rotation.y = ry
 
+        root.userData['gltfAnimations'] = gltf.animations
+
         return { object: root, terrainYOffset: pivotY }
       } catch (err) {
         console.warn('[SceneBuilder] GLTF character failed, using capsule:', url, err)

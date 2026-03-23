@@ -4,10 +4,17 @@ import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import type { InputActionEvent, InputAxisEvent } from '@base/input'
 import { PlayerController, PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
+import { CharacterAnimationRig } from '@/player/CharacterAnimationRig'
 import { SceneBuilder } from '@/scene/SceneBuilder'
 import { EnvironmentRuntime } from '@/scene/EnvironmentRuntime'
 import type { SceneDescriptor } from '@/scene/SceneDescriptor'
 import type { TerrainSampler } from '@/scene/TerrainSampler'
+import {
+  type ThirdPersonCameraPreset,
+  type ThirdPersonViewCam,
+  THIRD_PERSON_CAMERA_PRESETS,
+  resolveThirdPersonViewCam,
+} from './thirdPersonCamera'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -17,12 +24,16 @@ export interface ThirdPersonSceneConfig {
   groundColor: number
   fogColor: number
   characterSpeed: number
-  cameraDistance: number
-  cameraHeight: number
-  /** Camera position lerp speed — higher = snappier. */
+  /** Camera smoothing; higher = snappier. */
   cameraLerp: number
   /** Character facing rotation lerp speed. */
   facingLerp: number
+  /** Starting rig; overridden by explicit camera* fields when provided. */
+  cameraPreset?: ThirdPersonCameraPreset
+  cameraDistance?: number
+  cameraHeight?: number
+  cameraLateralOffset?: number
+  cameraPivotHeight?: number
 }
 
 const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
@@ -30,11 +41,13 @@ const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
   groundColor: 0x0f172a,
   fogColor: 0x080810,
   characterSpeed: 7,
-  cameraDistance: 7,
-  cameraHeight: 3.5,
   cameraLerp: 8,
   facingLerp: 12,
 }
+
+// Re-export for consumers (SceneView, game modules).
+export type { ThirdPersonCameraPreset, ThirdPersonViewCam }
+export { THIRD_PERSON_CAMERA_PRESETS, THIRD_PERSON_CAMERA_PRESET_ORDER } from './thirdPersonCamera'
 
 // ─── Module ──────────────────────────────────────────────────────────────────
 
@@ -43,32 +56,11 @@ const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
  * terrain descriptor for shaped environments.
  *
  * Locomotion state and rules live in {@link PlayerController}; this module wires
- * input, terrain snap, environment, and the follow camera rig.
+ * input, terrain snap, environment, follow camera rig, and optional skeletal
+ * locomotion clips via {@link CharacterAnimationRig}.
  *
- * ## Basic usage (flat default scene)
- * ```ts
- * new ThirdPersonSceneModule({ characterSpeed: 8 })
- * ```
- *
- * ## With a terrain descriptor
- * ```ts
- * new ThirdPersonSceneModule({
- *   descriptor: {
- *     terrain: { radius: 50, features: [
- *       { type: 'hill', x: 15, z: -10, radius: 12, height: 6 },
- *       { type: 'lake', x: -14, z: -8, radius: 10, depth: 2 },
- *       { type: 'river', path: [[10, 12], [-12, -0.8, -8]], width: 4, depth: 1 },
- *     ]},
- *     atmosphere: { fogColor: 0x0a120a, fogDensity: 0.013 },
- *   },
- * })
- * ```
- *
- * Mount alongside InputModule as a child of ThreeModule:
- * ```ts
- * await engine.mountChild('input', new InputModule())
- * await engine.mountChild('scene', new ThirdPersonSceneModule({ ... }))
- * ```
+ * Camera: use `cameraPreset` (`close-follow` default) or override distance /
+ * height / lateral / pivot. Call {@link setCameraPreset} at runtime for tactical views.
  */
 export class ThirdPersonSceneModule extends BaseModule {
   readonly id = 'third-person-scene'
@@ -87,24 +79,55 @@ export class ThirdPersonSceneModule extends BaseModule {
   private unregisterSystem: (() => void) | null = null
   private environment: EnvironmentRuntime | null = null
 
+  private animRig: CharacterAnimationRig | null = null
+
+  private viewCam: ThirdPersonViewCam
+  private activeCameraPreset: ThirdPersonCameraPreset
+
   private readonly _camTarget = new THREE.Vector3()
   private readonly _lookAt = new THREE.Vector3()
 
-  constructor(options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {}) {
+  constructor(
+    options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {},
+  ) {
     super()
-    const { descriptor, ...configOverrides } = options
-    this.cfg        = { ...DEFAULT_CONFIG, ...configOverrides }
+    const {
+      descriptor,
+      cameraPreset = 'close-follow',
+      cameraDistance,
+      cameraHeight,
+      cameraLateralOffset,
+      cameraPivotHeight,
+      ...configRest
+    } = options
+    this.cfg        = { ...DEFAULT_CONFIG, ...configRest }
     this.descriptor = descriptor
-    this.player     = new PlayerController({
+    this.activeCameraPreset = cameraPreset
+    this.viewCam = resolveThirdPersonViewCam(cameraPreset, {
+      distance: cameraDistance,
+      height: cameraHeight,
+      lateral: cameraLateralOffset,
+      pivotY: cameraPivotHeight,
+    })
+    this.player = new PlayerController({
       characterSpeed: this.cfg.characterSpeed,
       facingLerp: this.cfg.facingLerp,
       terrainYOffset: PLAYER_CAPSULE_HALF_HEIGHT,
     })
   }
 
-  /** Exposed for editor HUD / future game modules that read locomotion state. */
   getPlayerController(): PlayerController {
     return this.player
+  }
+
+  getCameraPreset(): ThirdPersonCameraPreset {
+    return this.activeCameraPreset
+  }
+
+  /** Swap distance / height / lateral / pivot to a named rig (tactical, high, …). */
+  setCameraPreset(preset: ThirdPersonCameraPreset): void {
+    this.activeCameraPreset = preset
+    this.viewCam = { ...THIRD_PERSON_CAMERA_PRESETS[preset] }
   }
 
   // ─── Mount ──────────────────────────────────────────────────────────────────
@@ -125,6 +148,7 @@ export class ThirdPersonSceneModule extends BaseModule {
     }
 
     this.player.resetFacing(this.character.rotation.y)
+    this.animRig = new CharacterAnimationRig(this.character)
 
     this.initCamera(ctx.camera)
 
@@ -152,6 +176,9 @@ export class ThirdPersonSceneModule extends BaseModule {
     this.unregisterSystem?.()
     this.offInputAxis?.()
     this.offInputAction?.()
+
+    this.animRig?.dispose()
+    this.animRig = null
 
     this.environment?.dispose()
     this.environment = null
@@ -207,13 +234,7 @@ export class ThirdPersonSceneModule extends BaseModule {
   // ─── Camera init ─────────────────────────────────────────────────────────────
 
   private initCamera(camera: THREE.PerspectiveCamera): void {
-    const charPos = this.character.position
-    camera.position.set(
-      charPos.x,
-      charPos.y + this.cfg.cameraHeight,
-      charPos.z + this.cfg.cameraDistance,
-    )
-    camera.lookAt(charPos.x, charPos.y + 1, charPos.z)
+    this.placeCamera(camera, this.player.getFacing(), 1)
   }
 
   // ─── Per-frame update ─────────────────────────────────────────────────────────
@@ -225,22 +246,40 @@ export class ThirdPersonSceneModule extends BaseModule {
       sampler: this.sampler,
       playableRadius: this.effectiveRadius,
     })
+
+    const snap = this.player.getSnapshot()
+    const horiz = Math.hypot(snap.velocity.x, snap.velocity.z)
+    this.animRig?.update(delta, horiz)
+
     this.updateCamera(delta, ctx.camera)
   }
 
-  private updateCamera(delta: number, camera: THREE.PerspectiveCamera): void {
-    const { cameraDistance, cameraHeight, cameraLerp } = this.cfg
-    const facing = this.player.getFacing()
+  /**
+   * Camera sits behind the character along facing, plus lateral offset on XZ.
+   * back = (sin(f), cos(f)) * distance in (x,z); right = (cos(f), -sin(f)) * lateral.
+   */
+  private placeCamera(camera: THREE.PerspectiveCamera, facing: number, lerpT: number): void {
+    const { distance, height, lateral, pivotY } = this.viewCam
+    const bx = Math.sin(facing) * distance
+    const bz = Math.cos(facing) * distance
+    const rx = Math.cos(facing) * lateral
+    const rz = -Math.sin(facing) * lateral
 
-    this._camTarget.set(
-      this.character.position.x + Math.sin(facing) * cameraDistance,
-      this.character.position.y + cameraHeight,
-      this.character.position.z + Math.cos(facing) * cameraDistance,
-    )
+    const p = this.character.position
+    this._camTarget.set(p.x + bx + rx, p.y + height, p.z + bz + rz)
+    if (lerpT >= 1) {
+      camera.position.copy(this._camTarget)
+    } else {
+      camera.position.lerp(this._camTarget, lerpT)
+    }
 
-    camera.position.lerp(this._camTarget, cameraLerp * delta)
-
-    this._lookAt.copy(this.character.position).setY(this.character.position.y + 0.3)
+    this._lookAt.copy(p).setY(p.y + pivotY)
     camera.lookAt(this._lookAt)
+  }
+
+  private updateCamera(delta: number, camera: THREE.PerspectiveCamera): void {
+    const facing = this.player.getFacing()
+    const t = Math.min(1, this.cfg.cameraLerp * delta)
+    this.placeCamera(camera, facing, t)
   }
 }

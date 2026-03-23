@@ -51,6 +51,8 @@ export const scene01: SceneDescriptor = {
     startPosition: [0, 0],
     modelUrl: '/models/mccree/scene.gltf',
     modelScale: 1,
+    /** Model forward was +Z toward camera; engine locomotion faces −Z. */
+    rotationY: Math.PI,
   },
   objects: [
     {
