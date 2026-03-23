@@ -1,0 +1,40 @@
+---
+description: Vue 3 component patterns and conventions
+globs: **/*.vue
+alwaysApply: false
+---
+
+# Vue 3 Patterns
+
+## Component Structure
+- Always use `<script setup lang="ts">` — never Options API, never `defineComponent`
+- Order within SFC: `<script setup>` → `<template>` → `<style scoped>`
+- One component per file, filename matches component name in PascalCase
+
+## Composition
+- Extract reusable logic into composables in `src/composables/use<Name>.ts`
+- Composables must start with `use` and return a plain object (not reactive wrapper)
+- Prefer `computed` over methods for derived state
+
+## Props & Emits
+```vue
+// ✅ GOOD
+const props = defineProps<{ title: string; count?: number }>()
+const emit = defineEmits<{ update: [value: number] }>()
+
+// ❌ BAD
+props: { title: String }
+```
+
+## Reactivity
+- Use `ref` for primitives, `reactive` for objects — be consistent
+- Never destructure `reactive` objects directly (loses reactivity)
+- Use `toRefs` when you need to destructure a reactive object
+
+## Routing & State
+- Use `vue-router` with typed routes — define route names as a const enum
+- Use `pinia` for global state — one store per domain, not one giant store
+
+## PWA Specifics
+- Register service worker only in production builds
+- Handle offline state explicitly — always show the user a meaningful offline UI

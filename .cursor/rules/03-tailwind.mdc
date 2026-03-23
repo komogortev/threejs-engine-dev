@@ -1,0 +1,31 @@
+---
+description: Tailwind CSS usage patterns and constraints
+globs: **/*.vue, **/*.html
+alwaysApply: false
+---
+
+# Tailwind CSS Patterns
+
+## Usage Rules
+- Utility classes only in templates — no inline `style=""` unless dynamic values require it
+- For dynamic classes, use `:class` binding with a computed or explicit object
+- Never mix Tailwind utilities with raw CSS in `<style scoped>` for the same property
+
+## Class Organization (order matters for readability)
+```
+Layout → Flexbox/Grid → Spacing → Sizing → Typography → Color → Border → Effects → State
+```
+Example: `flex items-center gap-4 px-6 py-3 w-full text-sm font-medium text-white bg-blue-600 rounded-lg shadow hover:bg-blue-700`
+
+## Component Patterns
+- Extract repeated class combinations into a component — not into `@apply`
+- Use `@apply` only in base layer styles (e.g., `body`, `h1`) via `src/assets/base.css`
+- Responsive prefix order: base → `sm:` → `md:` → `lg:` → `xl:`
+
+## Dark Mode
+- Use `dark:` variant — configure `darkMode: 'class'` in `tailwind.config`
+- Every color utility used should have a `dark:` counterpart defined
+
+## Do Not
+- Do not use arbitrary values `[123px]` unless no token exists — prefer config extension
+- Do not use Tailwind for animations that need JS control — use CSS vars + transitions

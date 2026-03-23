@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-electron/
+*.local
+.env
+.env.*
+!.env.example
+*.tsbuildinfo

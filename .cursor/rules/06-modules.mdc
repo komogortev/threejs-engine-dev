@@ -1,0 +1,58 @@
+---
+description: Module mounting contract rules for the pwa-platform shell host
+globs: src/components/modules/**, src/composables/useModule*
+alwaysApply: false
+---
+
+# Module Mounting Rules
+
+## The Contract
+All modules mounted by this shell MUST implement `EngineModule` from `@base/engine-core`.
+- Never mount a module that doesn't implement `mount()` / `unmount()`
+- Always `await module.unmount()` before removing a module from the DOM
+
+## Shell-Side Mounting Pattern
+```vue
+<!-- src/components/modules/ModuleMount.vue -->
+<script setup lang="ts">
+import type { EngineModule, ShellContext } from '@base/engine-core'
+
+const props = defineProps<{ module: EngineModule; context: ShellContext }>()
+const container = ref<HTMLElement>()
+
+onMounted(async () => {
+  if (container.value) await props.module.mount(container.value, props.context)
+})
+
+onUnmounted(async () => {
+  await props.module.unmount()
+})
+</script>
+
+<template>
+  <div ref="container" class="module-container" />
+</template>
+```
+
+## ShellContext Construction
+Build the ShellContext once at the app level and inject it:
+```typescript
+// src/composables/useShellContext.ts
+import { EventBus } from '@base/engine-core'
+import { useRouter } from 'vue-router'
+
+export function useShellContext(): ShellContext {
+  const router = useRouter()
+  return {
+    eventBus: new EventBus(),
+    locale: 'en',
+    navigate: (path) => router.push(path),
+  }
+}
+```
+
+## Rules
+- One `ModuleMount` component per module slot — do not nest raw DOM manipulation
+- Pass context via `ShellContext`, never pass the Vue router or Pinia store directly into a module
+- Modules communicate with the shell via `eventBus`, not via Vue props or emits
+- If a module needs UI rendered in the shell (modals, toasts), it emits events — the shell listens and renders

@@ -1,0 +1,37 @@
+---
+description: Node.js backend conventions (API layer)
+globs: **/*.ts
+alwaysApply: false
+---
+
+# Node.js Backend Conventions
+
+## Structure
+- Keep route definitions thin — business logic lives in service files, not route handlers
+- Layer: `routes/` → `services/` → `repositories/` (data access)
+- One responsibility per file — a route file only wires endpoints
+
+## Error Handling
+```typescript
+// ✅ GOOD — typed error response
+class AppError extends Error {
+  constructor(public statusCode: number, message: string) { super(message) }
+}
+
+// ❌ BAD — string throw, untyped catch
+throw 'not found'
+```
+- Always return structured error responses: `{ error: string; code?: string }`
+- Use a central error handler middleware — never handle errors inline in routes
+
+## Validation
+- Validate all incoming request bodies with `zod` before touching business logic
+- Return 400 with validation details on schema failure — never 500 for user input errors
+
+## Environment
+- Never hardcode secrets or config — use `process.env` with a validated config module
+- Validate env vars at startup using `zod` — fail fast if required vars are missing
+
+## Security
+- Sanitize user input — never pass raw user strings to queries or shell commands
+- Set CORS explicitly — never use `cors()` without an allowed origins list in production

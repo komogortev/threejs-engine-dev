@@ -1,0 +1,37 @@
+---
+description: TypeScript strict conventions for the entire codebase
+globs: **/*.ts, **/*.tsx, **/*.vue
+alwaysApply: false
+---
+
+# TypeScript Conventions
+
+## Strictness
+- `strict: true` in tsconfig — never disable strict checks to make code compile
+- No `any` — use `unknown` and narrow it, or define a proper type
+- No non-null assertions (`!`) unless you add a comment explaining why it's safe
+
+## Types vs Interfaces
+- Use `type` for unions, intersections, and utility types
+- Use `interface` for object shapes that may be extended
+- Export types from a `types.ts` file per module — never inline complex types
+
+## Naming
+```typescript
+// ✅ GOOD
+type UserId = string
+interface UserProfile { id: UserId; name: string }
+const MAX_RETRIES = 3
+
+// ❌ BAD
+const x: any = {}
+let data: Object
+```
+
+## Async
+- Always type the return of async functions: `async function load(): Promise<User>`
+- Use `Result` pattern or typed errors instead of throwing raw strings
+
+## Imports
+- Use path aliases (`@/`) — never use deep relative paths like `../../../utils`
+- Group imports: external libs → internal modules → types (with `import type`)

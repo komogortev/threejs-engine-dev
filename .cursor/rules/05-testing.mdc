@@ -1,0 +1,42 @@
+---
+description: Vitest testing patterns and conventions
+globs: **/*.test.ts, **/*.spec.ts, **/*.test.vue
+alwaysApply: false
+---
+
+# Vitest Testing Conventions
+
+## What to Test
+- Test behavior, not implementation — test what a function does, not how
+- Every composable gets a unit test
+- Every API route gets an integration test (mock the DB, not the route)
+- Do not test Vue internals (reactivity system, lifecycle hooks themselves)
+
+## Test Structure
+```typescript
+// ✅ GOOD — clear Arrange / Act / Assert
+describe('useCounter', () => {
+  it('increments the count by 1', () => {
+    const { count, increment } = useCounter()
+    increment()
+    expect(count.value).toBe(1)
+  })
+})
+
+// ❌ BAD — vague name, no structure
+test('works', () => { ... })
+```
+
+## Naming
+- Test files: `<subject>.test.ts` colocated with source, or in `__tests__/`
+- Describe blocks: the unit under test (`useCounter`, `AuthService`)
+- It blocks: `'<does something> when <condition>'`
+
+## Mocking
+- Mock external dependencies (HTTP, filesystem, DB) — never in unit tests mock the module under test
+- Use `vi.mock()` at the top of the file, not inside tests
+- Reset mocks in `beforeEach` — never rely on test order
+
+## Coverage
+- Aim for meaningful coverage, not 100% — focus on critical paths and edge cases
+- Run `vitest --coverage` before committing a new feature

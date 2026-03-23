@@ -1,0 +1,49 @@
+---
+description: Rules for building engine-level modules that use EngineContext and mountChild
+globs: src/**/*.ts, src/**/*.vue
+alwaysApply: false
+---
+
+# Engine Module Rules
+
+## Extending BaseModule
+Always extend `BaseModule` from `@base/engine-core` — never implement `EngineModule` from scratch:
+```typescript
+import { BaseModule } from '@base/engine-core'
+import type { ShellContext } from '@base/engine-core'
+
+export class MyEngine extends BaseModule {
+  readonly id = 'my-engine'
+
+  protected async onMount(container: HTMLElement, context: ShellContext): Promise<void> {
+    // setup rendering, init entity manager, etc.
+  }
+
+  protected async onUnmount(): Promise<void> {
+    // dispose renderer, cancel animation frame, release GPU memory
+  }
+}
+```
+
+## EngineContext — Enriching Context for Children
+When this module hosts child modules, override `buildChildContext()` to inject engine primitives:
+```typescript
+protected buildChildContext(): EngineContext {
+  return {
+    ...this.context,
+    host: this,
+    entityManager: this.entityManager,
+    // add renderer, scene, clock etc. in the concrete engine package
+  }
+}
+```
+
+## GPU / Animation Cleanup (critical)
+- Always cancel `requestAnimationFrame` in `onUnmount()`
+- Dispose Three.js geometries, materials, and textures — memory leaks are silent and cumulative
+- Never hold references to DOM elements after `onUnmount()` — set them to null
+
+## Child Module Communication
+- Children communicate upward via `this.context.eventBus` (shell-level) or `this.bus` (engine-level)
+- The engine should not call methods directly on child modules after mounting — use events
+- Use namespaced event names: `'engine:ready'`, `'game:scene-change'`, `'dialog:open'`
