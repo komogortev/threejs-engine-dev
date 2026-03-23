@@ -20,6 +20,7 @@ const CHARACTER_HALF_HEIGHT = 0.85
 export interface SceneBuilderResult {
   sampler: TerrainSampler
   character: THREE.Mesh
+  terrainMesh: THREE.Mesh
   effectiveRadius: number
 }
 
@@ -74,7 +75,8 @@ export class SceneBuilder {
 
     // ── Terrain ───────────────────────────────────────────────────────────────
     const sampler = new TerrainSampler(terrain.features ?? [], heightmapData)
-    ctx.scene.add(SceneBuilder.buildTerrain(sampler, terrain))
+    const terrainMesh = SceneBuilder.buildTerrain(sampler, terrain)
+    ctx.scene.add(terrainMesh)
 
     // ── Water ─────────────────────────────────────────────────────────────────
     // Add water plane whenever features can produce sub-seaLevel terrain.
@@ -105,7 +107,7 @@ export class SceneBuilder {
     // ── Objects ───────────────────────────────────────────────────────────────
     SceneBuilder.placeObjects(ctx.scene, descriptor.objects ?? [], sampler, radius, seaLevel)
 
-    return { sampler, character, effectiveRadius: radius }
+    return { sampler, character, terrainMesh, effectiveRadius: radius }
   }
 
   // ─── Terrain mesh ─────────────────────────────────────────────────────────────

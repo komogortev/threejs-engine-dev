@@ -19,6 +19,12 @@ const router = useRouter()
         Scene
       </button>
       <button
+        class="w-full px-6 py-3 bg-violet-700 hover:bg-violet-600 active:bg-violet-800 text-white text-sm font-semibold rounded-xl transition-colors"
+        @click="router.push('/editor')"
+      >
+        Scene Editor
+      </button>
+      <button
         class="w-full px-6 py-3 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-white text-sm font-semibold rounded-xl transition-colors"
         @click="router.push('/game')"
       >

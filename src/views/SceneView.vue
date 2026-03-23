@@ -4,135 +4,16 @@ import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { InputModule } from '@base/input'
 import { ThirdPersonSceneModule } from '@/modules/ThirdPersonSceneModule'
-import type { SceneDescriptor } from '@/scene/SceneDescriptor'
+import { scene01 } from '@/scenes/scene-01'
 import { useShellContext } from '@/composables/useShellContext'
 
 const router = useRouter()
 const context = useShellContext()
 const container = ref<HTMLElement>()
 
-// ─── Scene authoring ─────────────────────────────────────────────────────────
-//
-// The terrain is driven entirely by the painted heightmap.
-// Mid-grey (128) = sea level baseline.
-// White  = +amplitude (hills/ridges).
-// Black  = −amplitude (depressions, lake floors).
-//
-// Additional procedural features can stack on top if needed.
-//
-const descriptor: SceneDescriptor = {
-  terrain: {
-    radius:      50,
-    resolution:  180,      // higher res = sharper detail from the image
-    seaLevel:    0,
-    baseColor:   0x1c2e1a,
-    waterColor:  0x0a1c38,
-    waterOpacity: 0.76,
-    features: [
-      {
-        type:      'heightmap',
-        url:       '/terrains/heatmap-scene-1.png',
-        amplitude: 10,       // white pixel = +10 world units, black = -10
-        // worldWidth/worldDepth default to terrain diameter (100 units)
-        // offsetX/offsetZ default to 0 (image centred on world origin)
-      },
-    ],
-  },
-
-  atmosphere: {
-    fogColor:         0x06100a,
-    fogDensity:       0.013,
-    ambientColor:     0x1e3320,
-    ambientIntensity: 0.8,
-    lights: [
-      // Key: warm afternoon sun, front-right
-      { type: 'directional', color: 0xfff0cc, intensity: 1.3, position: [6, 14, 7]    },
-      // Rim: cool deep-blue from behind-left
-      { type: 'directional', color: 0x0a1e5a, intensity: 0.8, position: [-8, 4, -10] },
-    ],
-  },
-
-  character: {
-    startPosition: [0, 0],   // world centre — Y auto-snapped to terrain
-  },
-
-  // ─── World objects ─────────────────────────────────────────────────────────
-  //
-  // The heightmap encodes three distinct zones:
-  //   - Large hill  (bright, left-centre):   world X ≈ -25 to 0,  Z ≈ -10 to 15
-  //   - Depression  (dark,  centre-right):   world X ≈  0  to 25, Z ≈ -15 to 15
-  //   - Outcrop arc (bright, right-upper):   world X ≈ 15  to 40, Z ≈ -35 to  0
-  //
-  // Objects are scattered around these zones; sea-level check in SceneBuilder
-  // prevents anything spawning underwater automatically.
-  //
-  objects: [
-    // ── Rock clusters along the hill base ──
-    {
-      type:        'scatter',
-      primitive:   'rock',
-      count:       18,
-      centerX:     -14,
-      centerZ:     2,
-      innerRadius: 10,
-      outerRadius: 24,
-      scaleMin:    0.6,
-      scaleMax:    2.2,
-      seed:        1,
-    },
-
-    // ── Tree ring around the depression (trees stop at sea level automatically) ──
-    {
-      type:        'scatter',
-      primitive:   'tree',
-      count:       28,
-      centerX:     12,
-      centerZ:     -2,
-      innerRadius: 12,
-      outerRadius: 26,
-      scaleMin:    0.7,
-      scaleMax:    1.4,
-      seed:        2,
-    },
-
-    // ── Crystal cluster on the rocky outcrop arc ──
-    {
-      type:        'scatter',
-      primitive:   'crystal',
-      count:       10,
-      centerX:     24,
-      centerZ:     -20,
-      innerRadius: 2,
-      outerRadius: 14,
-      scaleMin:    0.5,
-      scaleMax:    1.6,
-      seed:        3,
-    },
-
-    // ── Sparse trees across the general plateau ──
-    {
-      type:        'scatter',
-      primitive:   'tree',
-      count:       15,
-      centerX:     -5,
-      centerZ:     -20,
-      innerRadius: 5,
-      outerRadius: 20,
-      scaleMin:    0.8,
-      scaleMax:    1.2,
-      seed:        4,
-    },
-
-    // ── Anchor rocks — hand-placed for visual interest near spawn ──
-    { type: 'rock', x: -8,  z: -12, scale: 3.2, rotationY: 0.8  },
-    { type: 'rock', x:  6,  z:  8,  scale: 2.0, rotationY: 2.1  },
-    { type: 'rock', x: -18, z:  6,  scale: 4.0, rotationY: 0.3  },
-  ],
-}
-
 const engine      = new ThreeModule()
 const inputModule = new InputModule()
-const sceneModule = new ThirdPersonSceneModule({ descriptor })
+const sceneModule = new ThirdPersonSceneModule({ descriptor: scene01 })
 
 /** Hide the WASD hint on first movement or after 4 s. */
 const showHint = ref(true)
