@@ -13,8 +13,8 @@ export function convertUnlitToPbrRough(root: THREE.Object3D): void {
         const std = new THREE.MeshStandardMaterial({
           map: m.map,
           color: m.color,
-          roughness: 0.88,
-          metalness: 0.06,
+          roughness: 0.76,
+          metalness: 0.08,
           transparent: m.transparent,
           opacity: m.opacity,
           side: m.side,

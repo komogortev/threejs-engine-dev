@@ -69,6 +69,19 @@ export class SceneBuilder {
 
     const dynamicSky = atmo.dynamicSky === true
 
+    if (dynamicSky) {
+      const hi = atmo.hemisphereIntensity
+      const hemiOn = hi === undefined ? true : hi > 0
+      if (hemiOn) {
+        const sky    = atmo.hemisphereSkyColor    ?? 0xb8d4f0
+        const ground = atmo.hemisphereGroundColor ?? 0x2f3d2c
+        const hInt   = hi === undefined ? 0.52 : hi
+        const hemi   = new THREE.HemisphereLight(sky, ground, hInt)
+        hemi.name    = 'atmosphere-hemisphere-fill'
+        ctx.scene.add(hemi)
+      }
+    }
+
     if (atmo.lights && atmo.lights.length > 0) {
       for (const l of atmo.lights) {
         if (dynamicSky && l.type === 'directional') continue

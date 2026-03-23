@@ -321,8 +321,9 @@ export class EnvironmentRuntime {
     const sunStr  = Math.max(0, this.sunDir.y)
     const moonStr = Math.max(0, this.moonDir.y)
 
-    this.sunLight.intensity  = this.sunMoonMerge.sunIntensity * (0.15 + 1.15 * sunStr)
-    this.moonLight.intensity = this.sunMoonMerge.moonIntensity * (0.2 + 0.9 * moonStr)
+    // Higher floor when sun is low — keeps subjects readable (with hemisphere + ambient).
+    this.sunLight.intensity  = this.sunMoonMerge.sunIntensity * (0.32 + 0.95 * sunStr)
+    this.moonLight.intensity = this.sunMoonMerge.moonIntensity * (0.28 + 0.85 * moonStr)
 
     this.sunLight.position.copy(this.sunDir).multiplyScalar(200)
     this.sunLight.target.position.set(0, 0, 0)

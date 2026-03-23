@@ -218,9 +218,17 @@ export interface AtmosphereDescriptor {
   fogColor?: number        // default 0x080810
   /** Exponential fog density — 0.012 reaches fog at ~60 units. */
   fogDensity?: number      // default 0.012
-  /** Hemisphere ambient colour. */
+  /** Flat ambient tint (see `AmbientLight`). */
   ambientColor?: number    // default 0x334155
   ambientIntensity?: number // default 0.9
+  /**
+   * Sky/ground fill when `dynamicSky` — softens N·L “hard shadow” look on characters.
+   * Defaults applied in `SceneBuilder` when `dynamicSky` is true (unless intensity is 0).
+   */
+  hemisphereSkyColor?: number
+  hemisphereGroundColor?: number
+  /** Set to 0 to disable hemisphere fill; default when omitted with dynamic sky is 0.52. */
+  hemisphereIntensity?: number
   /** Custom lights. If omitted, a default key + rim rig is added. */
   lights?: LightDescriptor[]
 

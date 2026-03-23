@@ -43,8 +43,11 @@ export const scene01: SceneDescriptor = {
     dynamicSky: true,
     fogColor: 0x1fdb93,
     fogDensity: 0.011,
-    ambientColor: 0x1e3320,
-    ambientIntensity: 0.85,
+    ambientColor: 0x3d5244,
+    ambientIntensity: 1.22,
+    hemisphereSkyColor: 0xc4e0ff,
+    hemisphereGroundColor: 0x3a4536,
+    hemisphereIntensity: 0.58,
     time: {
       initialPhase: 0.3438,
       phaseSpeed: 0.0051,
@@ -53,8 +56,8 @@ export const scene01: SceneDescriptor = {
       model: 'physical',
     },
     sunMoon: {
-      sunIntensity: 1.25,
-      moonIntensity: 0.2,
+      sunIntensity: 1.02,
+      moonIntensity: 0.26,
     },
     clouds: {
       enabled: true,
