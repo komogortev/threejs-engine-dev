@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@base/audio':
+        specifier: link:../SHARED/packages/audio
+        version: link:../SHARED/packages/audio
       '@base/engine-core':
         specifier: link:../SHARED/packages/engine-core
         version: link:../SHARED/packages/engine-core
+      '@base/input':
+        specifier: link:../SHARED/packages/input
+        version: link:../SHARED/packages/input
       '@base/threejs-engine':
         specifier: link:../SHARED/packages/threejs-engine
         version: link:../SHARED/packages/threejs-engine
