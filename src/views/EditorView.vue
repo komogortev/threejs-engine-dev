@@ -9,6 +9,7 @@ import type { EditorState, EditorTool, EditorObject, GizmoMode, EnvironmentState
 import type { PrimitiveType, GltfObject, ScatterField } from '@/scene/SceneDescriptor'
 import { copyObjectsToClipboard, copyDescriptorToClipboard } from '@/editor/DescriptorExporter'
 import { scene01 } from '@/scenes/scene-01'
+import { EDITOR_ORBIT_BOOKMARKS } from '@/editor/editorOrbitPresets'
 
 function defaultEnvironmentState(): EnvironmentState {
   return {
@@ -54,6 +55,8 @@ const state = ref<EditorState>({
   scatterFields:       [],
   selectedScatterIndex: null,
   environment:         defaultEnvironmentState(),
+  orbitBookmarkIndex:  0,
+  orbitBookmarkLabel:  EDITOR_ORBIT_BOOKMARKS[0]!.label,
 })
 
 const selected = computed<EditorObject | null>(() =>
@@ -133,6 +136,10 @@ function setMode(mode: GizmoMode): void   { editor.setGizmoMode(mode) }
 function selectItem(idx: number): void    { editor.selectByIndex(idx) }
 function deleteSelected(): void           { editor.deleteSelected() }
 
+function setOrbitBookmark(idx: number): void {
+  editor.setOrbitBookmarkIndex(idx)
+}
+
 function objectIcon(obj: EditorObject): string {
   if (obj.type === 'gltf') return '📦'
   return PRIMITIVE_ICONS[obj.type as PrimitiveType] ?? '?'
@@ -160,6 +167,7 @@ onMounted(async () => {
   editor.onStateChanged = (s) => { state.value = s }
   await engine.mount(container.value, context)
   await engine.mountChild('editor', editor)
+  container.value.focus()
 })
 
 onUnmounted(async () => {
@@ -171,14 +179,28 @@ onUnmounted(async () => {
 <template>
   <div class="relative w-screen h-screen bg-black overflow-hidden select-none">
 
-    <!-- Three.js canvas -->
-    <div ref="container" class="absolute inset-0" />
+    <!-- Three.js canvas (focusable so editor shortcuts don’t hit focused menu buttons from last route) -->
+    <div ref="container" class="absolute inset-0 outline-none" tabindex="0" />
 
     <!-- ── Top toolbar ──────────────────────────────────────────────────────── -->
     <div class="absolute top-0 left-0 right-64 h-11 flex items-center gap-2 px-4
                 bg-black/60 backdrop-blur-sm border-b border-white/10">
 
       <button class="nav-btn" @click="router.push('/')">← Menu</button>
+
+      <div class="w-px h-5 bg-white/10" />
+
+      <!-- Saved orbit views -->
+      <span class="text-white/25 text-[10px] uppercase tracking-wider hidden sm:inline">View</span>
+      <button
+        v-for="(bm, i) in EDITOR_ORBIT_BOOKMARKS"
+        :key="bm.id"
+        :class="['orbit-btn', state.orbitBookmarkIndex === i ? 'orbit-active' : 'orbit-idle']"
+        type="button"
+        @click="setOrbitBookmark(i)"
+      >
+        {{ bm.label }}
+      </button>
 
       <div class="w-px h-5 bg-white/10" />
 
@@ -663,7 +685,11 @@ onUnmounted(async () => {
     </div>
 
     <!-- ── Hints ─────────────────────────────────────────────────────────────── -->
-    <div class="absolute bottom-4 left-4 space-y-1 pointer-events-none">
+    <div class="absolute bottom-4 left-4 space-y-1 pointer-events-none max-w-md">
+      <p class="hint">
+        View: <span class="text-white/35">[</span> / <span class="text-white/35">]</span> cycle ·
+        buttons in toolbar · {{ state.orbitBookmarkLabel }}
+      </p>
       <p class="hint">Orbit: left-drag · Zoom: scroll · Right-click terrain: set orbit anchor</p>
       <p class="hint">T = move · R = rotate · S = scale · Esc = deselect · Del = delete</p>
     </div>
@@ -687,6 +713,12 @@ onUnmounted(async () => {
 }
 .tool-active { @apply bg-indigo-600/60 text-white ring-1 ring-indigo-400/50; }
 .tool-idle   { @apply text-white/60 hover:bg-white/10 hover:text-white/90; }
+
+.orbit-btn {
+  @apply px-2 py-0.5 rounded text-[10px] font-medium transition-colors;
+}
+.orbit-active { @apply bg-teal-700/80 text-teal-50; }
+.orbit-idle   { @apply text-white/40 hover:bg-white/10 hover:text-white/80; }
 
 .hint {
   @apply text-white/20 text-[10px] font-mono tracking-wider;

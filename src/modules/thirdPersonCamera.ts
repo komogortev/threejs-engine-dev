@@ -24,12 +24,12 @@ export interface ThirdPersonViewCam {
 }
 
 export const THIRD_PERSON_CAMERA_PRESETS: Record<ThirdPersonCameraPreset, ThirdPersonViewCam> = {
-  /** Low, slightly left — good default for third-person play. */
+  /** Over-the-shoulder: higher eye line, look-at on upper torso; lateral bias = camera left of spine. */
   'close-follow': {
-    distance: 4.25,
-    height:   1.2,
-    lateral:  -0.55,
-    pivotY:   0.55,
+    distance: 5.4,
+    height:   2.35,
+    lateral:  -0.72,
+    pivotY:   1.38,
   },
   /** Higher, mild right bias — classic “shoulder” adventure cam. */
   shoulder: {

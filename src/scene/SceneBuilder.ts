@@ -16,6 +16,7 @@ import { type HeightmapData, loadHeightmap } from './HeightmapLoader'
 import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from './PrimitiveFactory'
 import { createSeeder } from './Seeder'
 import { PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
+import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
 
 export interface SceneBuilderResult {
   sampler: TerrainSampler
@@ -245,6 +246,7 @@ export class SceneBuilder {
         const model = gltf.scene.clone(true)
         const scale = charDesc.modelScale ?? 1
         model.scale.setScalar(scale)
+        convertUnlitToPbrRough(model)
 
         const root = new THREE.Group()
         root.name = 'character-root'
@@ -256,8 +258,9 @@ export class SceneBuilder {
         model.position.y += charDesc.modelYOffset ?? 0
 
         const pivotY = charDesc.terrainPivotYOffset ?? 0
+        /** Visual yaw offset on the mesh only — locomotion overwrites `root.rotation.y` each frame. */
         const ry = charDesc.rotationY ?? 0
-        if (ry !== 0) root.rotation.y = ry
+        if (ry !== 0) model.rotation.y = ry
 
         root.userData['gltfAnimations'] = gltf.animations
 

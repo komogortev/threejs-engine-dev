@@ -53,6 +53,8 @@ onMounted(async () => {
   await engine.mountChild('input', inputModule)
   await engine.mountChild('scene', sceneModule)
 
+  container.value.focus()
+
   const offAxis = context.eventBus.on('input:axis', (raw) => {
     const e = raw as { axis: string; value: { x: number; y: number } }
     if (e.axis === 'move' && (Math.abs(e.value.x) > 0.1 || Math.abs(e.value.y) > 0.1)) {
@@ -76,7 +78,7 @@ onUnmounted(async () => {
 
 <template>
   <div class="relative w-screen h-screen bg-black overflow-hidden">
-    <div ref="container" class="absolute inset-0" />
+    <div ref="container" class="absolute inset-0 outline-none" tabindex="0" />
 
     <!-- Back button -->
     <div class="absolute top-4 left-4">

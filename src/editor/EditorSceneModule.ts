@@ -16,6 +16,8 @@ import type {
   ScatterField,
   AtmosphereDescriptor,
 } from '@/scene/SceneDescriptor'
+import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
+import { EDITOR_ORBIT_BOOKMARKS } from '@/editor/editorOrbitPresets'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,9 @@ export interface EditorState {
   selectedScatterIndex: number | null
   /** Fog, time-of-day, cloud params (see EnvironmentRuntime). */
   environment:          EnvironmentState
+  /** Index into {@link EDITOR_ORBIT_BOOKMARKS}. */
+  orbitBookmarkIndex:   number
+  orbitBookmarkLabel:   string
 }
 
 // ─── Colours for scatter zone rings ──────────────────────────────────────────
@@ -183,6 +188,8 @@ export class EditorSceneModule extends BaseModule {
 
   private _ghost: THREE.Object3D | null = null
 
+  private _orbitBookmarkIndex = 0
+
   // ── Cleanup refs ────────────────────────────────────────────────────────────
 
   private _offPointerDown!:  (e: PointerEvent) => void
@@ -242,15 +249,11 @@ export class EditorSceneModule extends BaseModule {
       await this._addTracked({ ...item } as EditorObject, ctx.scene)
     }
 
-    // ── Camera ───────────────────────────────────────────────────────────────
-    ctx.camera.position.set(0, 45, 50)
-    ctx.camera.lookAt(0, 0, 0)
-
     // ── OrbitControls ────────────────────────────────────────────────────────
     this.orbit               = new OrbitControls(ctx.camera, ctx.renderer.domElement)
     this.orbit.enableDamping = true
     this.orbit.dampingFactor = 0.08
-    this.orbit.target.set(0, 0, 0)
+    this._applyOrbitBookmark(0, false)
 
     // ── TransformControls ────────────────────────────────────────────────────
     this.transform = new TransformControls(ctx.camera, ctx.renderer.domElement)
@@ -446,6 +449,17 @@ export class EditorSceneModule extends BaseModule {
     if (this._selectedIndex !== null) this._deleteAtIndex(this._selectedIndex)
   }
 
+  /** Jump to a saved orbit (toolbar). */
+  setOrbitBookmarkIndex(index: number): void {
+    if (index < 0 || index >= EDITOR_ORBIT_BOOKMARKS.length) return
+    this._applyOrbitBookmark(index, true)
+  }
+
+  /** Step saved views (keyboard `[` / `]`). */
+  cycleOrbitBookmark(delta: number): void {
+    this._applyOrbitBookmark(this._orbitBookmarkIndex + delta, true)
+  }
+
   updateSelectedScale(scale: number): void {
     if (this._selectedIndex === null) return
     const desc = this._objects[this._selectedIndex]
@@ -601,6 +615,16 @@ export class EditorSceneModule extends BaseModule {
   private _handleKeyDown(e: KeyboardEvent): void {
     const tag = (e.target as HTMLElement).tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA') return
+    if (e.code === 'BracketLeft') {
+      e.preventDefault()
+      this.cycleOrbitBookmark(-1)
+      return
+    }
+    if (e.code === 'BracketRight') {
+      e.preventDefault()
+      this.cycleOrbitBookmark(1)
+      return
+    }
     switch (e.key) {
       case 'Delete':
       case 'Backspace':   this.deleteSelected();           break
@@ -609,6 +633,17 @@ export class EditorSceneModule extends BaseModule {
       case 'r': case 'R': this.setGizmoMode('rotate');    break
       case 's': case 'S': this.setGizmoMode('scale');     break
     }
+  }
+
+  private _applyOrbitBookmark(index: number, emit: boolean): void {
+    const n = EDITOR_ORBIT_BOOKMARKS.length
+    this._orbitBookmarkIndex = ((index % n) + n) % n
+    const b = EDITOR_ORBIT_BOOKMARKS[this._orbitBookmarkIndex]
+    if (!b) return
+    this._ctx.camera.position.set(b.camera[0], b.camera[1], b.camera[2])
+    this.orbit.target.set(b.target[0], b.target[1], b.target[2])
+    this.orbit.update()
+    if (emit) this._emitState()
   }
 
   // ─── Placement ───────────────────────────────────────────────────────────────
@@ -665,6 +700,7 @@ export class EditorSceneModule extends BaseModule {
       try {
         const gltf  = await this._ctx.assets.loadGLTF(gltfDesc.url)
         const model = gltf.scene.clone(true)
+        convertUnlitToPbrRough(model)
         model.position.copy(placeholder.position)
         model.rotation.copy(placeholder.rotation)
         model.scale.copy(placeholder.scale)
@@ -880,6 +916,7 @@ export class EditorSceneModule extends BaseModule {
   }
 
   private _emitState(): void {
+    const bm = EDITOR_ORBIT_BOOKMARKS[this._orbitBookmarkIndex]
     this.onStateChanged?.({
       objects:              [...this._objects],
       selectedIndex:        this._selectedIndex,
@@ -889,6 +926,8 @@ export class EditorSceneModule extends BaseModule {
       scatterFields:        this._scatterFields.map((f) => ({ ...f })),
       selectedScatterIndex: this._selectedScatterIndex,
       environment:          this._env.getState(),
+      orbitBookmarkIndex:   this._orbitBookmarkIndex,
+      orbitBookmarkLabel:   bm?.label ?? '—',
     })
   }
 }
