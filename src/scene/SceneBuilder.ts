@@ -1,8 +1,18 @@
 import * as THREE from 'three'
 import type { ThreeContext } from '@base/threejs-engine'
-import type { SceneDescriptor, LightDescriptor, TerrainDescriptor } from './SceneDescriptor'
+import type {
+  SceneDescriptor,
+  LightDescriptor,
+  TerrainDescriptor,
+  SceneObject,
+  PlacedObject,
+  ScatterField,
+  PrimitiveType,
+} from './SceneDescriptor'
 import { TerrainSampler } from './TerrainSampler'
 import { type HeightmapData, loadHeightmap } from './HeightmapLoader'
+import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from './PrimitiveFactory'
+import { createSeeder } from './Seeder'
 
 /** Pivot-centre-to-ground distance for the default CapsuleGeometry(0.35, 1.0). */
 const CHARACTER_HALF_HEIGHT = 0.85
@@ -26,6 +36,7 @@ export interface SceneBuilderResult {
  *   4. Water surface (single plane at seaLevel, only when terrain goes negative)
  *   5. Boundary ring (thin emissive torus at playable edge)
  *   6. Character capsule (positioned at terrain surface at startPosition)
+ *   7. Scene objects (explicit PlacedObjects + seeded ScatterFields)
  */
 export class SceneBuilder {
   static async build(ctx: ThreeContext, descriptor: SceneDescriptor): Promise<SceneBuilderResult> {
@@ -90,6 +101,9 @@ export class SceneBuilder {
     const character = SceneBuilder.buildCharacter()
     character.position.set(startX, groundY + CHARACTER_HALF_HEIGHT, startZ)
     ctx.scene.add(character)
+
+    // ── Objects ───────────────────────────────────────────────────────────────
+    SceneBuilder.placeObjects(ctx.scene, descriptor.objects ?? [], sampler, radius, seaLevel)
 
     return { sampler, character, effectiveRadius: radius }
   }
@@ -211,6 +225,111 @@ export class SceneBuilder {
       .map((f) => loadHeightmap(f as import('./SceneDescriptor').HeightmapFeature, diameter))
 
     return Promise.all(loads)
+  }
+
+  // ─── Object placement ─────────────────────────────────────────────────────────
+
+  /**
+   * Iterates the objects array and dispatches each entry to either explicit
+   * placement or scatter placement.
+   *
+   * `seaLevel` is the cut-off: objects whose terrain Y is below sea level are
+   * silently skipped — authors should avoid scattering trees into lakes.
+   */
+  private static placeObjects(
+    scene: THREE.Scene,
+    objects: SceneObject[],
+    sampler: TerrainSampler,
+    terrainRadius: number,
+    seaLevel: number,
+  ): void {
+    for (const obj of objects) {
+      if (obj.type === 'scatter') {
+        SceneBuilder.placeScatter(scene, obj as ScatterField, sampler, terrainRadius, seaLevel)
+      } else {
+        SceneBuilder.placeExplicit(scene, obj as PlacedObject, sampler, seaLevel)
+      }
+    }
+  }
+
+  /** Places a single explicitly-positioned primitive. */
+  private static placeExplicit(
+    scene: THREE.Scene,
+    obj: PlacedObject,
+    sampler: TerrainSampler,
+    seaLevel: number,
+  ): void {
+    const terrainY = sampler.sample(obj.x, obj.z)
+    if (terrainY < seaLevel) return
+
+    const scale  = obj.scale     ?? 1
+    const offset = PRIMITIVE_BASE_OFFSETS[obj.type as PrimitiveType] ?? 0
+    const mesh   = PrimitiveFactory.build(obj.type as PrimitiveType, scale, Math.random)
+    mesh.position.set(obj.x, terrainY + offset * scale, obj.z)
+    mesh.rotation.y = obj.rotationY ?? 0
+    scene.add(mesh)
+  }
+
+  /**
+   * Scatters `field.count` instances within a donut zone.
+   *
+   * Distribution:
+   *   - Uniform area distribution: √(u * (outerR² − innerR²) + innerR²)
+   *     ensures density is even across the annulus, not clustered at the centre.
+   *   - Seeded PRNG guarantees identical layouts across reloads.
+   *   - Placement is retried (up to count×10 attempts) when a candidate lands
+   *     outside the terrain disc or below sea level.
+   *   - Scale and rotation are also seeded so each instance is deterministic.
+   */
+  private static placeScatter(
+    scene: THREE.Scene,
+    field: ScatterField,
+    sampler: TerrainSampler,
+    terrainRadius: number,
+    seaLevel: number,
+  ): void {
+    const rng      = createSeeder(field.seed ?? 0)
+    const cx       = field.centerX    ?? 0
+    const cz       = field.centerZ    ?? 0
+    const innerR   = field.innerRadius ?? 0
+    const outerR   = field.outerRadius
+    const scaleMin = field.scaleMin   ?? 0.75
+    const scaleMax = field.scaleMax   ?? 1.25
+    const discR2   = (terrainRadius - 2) * (terrainRadius - 2)
+    const outerR2  = outerR  * outerR
+    const innerR2  = innerR  * innerR
+
+    let placed   = 0
+    let attempts = 0
+    const maxAttempts = field.count * 10
+
+    while (placed < field.count && attempts < maxAttempts) {
+      attempts++
+
+      // Uniform area distribution within the annulus
+      const angle = rng() * 2 * Math.PI
+      const r     = Math.sqrt(rng() * (outerR2 - innerR2) + innerR2)
+      const x     = cx + Math.cos(angle) * r
+      const z     = cz + Math.sin(angle) * r
+
+      // Reject if outside the playable terrain disc
+      if (x * x + z * z > discR2) continue
+
+      const terrainY = sampler.sample(x, z)
+
+      // Skip submerged positions (lakes, ocean floor)
+      if (terrainY < seaLevel) continue
+
+      const scale  = scaleMin + rng() * (scaleMax - scaleMin)
+      const rotY   = rng() * Math.PI * 2
+      const offset = PRIMITIVE_BASE_OFFSETS[field.primitive] ?? 0
+
+      const obj = PrimitiveFactory.build(field.primitive, scale, rng)
+      obj.position.set(x, terrainY + offset * scale, z)
+      obj.rotation.y = rotY
+      scene.add(obj)
+      placed++
+    }
   }
 
   // ─── Lights ───────────────────────────────────────────────────────────────────

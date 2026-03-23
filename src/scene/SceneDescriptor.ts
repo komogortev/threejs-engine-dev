@@ -169,10 +169,69 @@ export interface CharacterDescriptor {
   startPosition?: [number, number]
 }
 
+// ─── Objects ─────────────────────────────────────────────────────────────────
+
+/**
+ * Built-in primitive types. No asset loading needed — geometry is built in code.
+ * Swap any for a GLTF model in Step 4d without changing the descriptor structure.
+ */
+export type PrimitiveType = 'rock' | 'tree' | 'crystal' | 'pillar'
+
+/**
+ * A single explicitly-placed primitive object.
+ * Y is auto-snapped to the terrain surface; objects placed below sea level are skipped.
+ */
+export interface PlacedObject {
+  type: PrimitiveType
+  x: number
+  z: number
+  /** Uniform scale multiplier. Default 1. */
+  scale?: number
+  /** Y-axis rotation in radians. Default 0. */
+  rotationY?: number
+}
+
+/**
+ * A density field that scatters primitives within a donut zone.
+ *
+ * Placement algorithm:
+ *   - Uniform area distribution (no clustering at inner radius).
+ *   - Fully deterministic: same `seed` → same layout every time.
+ *   - Objects that land below sea level or outside the terrain disc are skipped
+ *     and retried, up to count × 10 attempts.
+ *
+ * @example
+ * // Ring of trees around a lake
+ * { type: 'scatter', primitive: 'tree', count: 24,
+ *   centerX: -14, centerZ: -8, innerRadius: 12, outerRadius: 20, seed: 7 }
+ */
+export interface ScatterField {
+  type: 'scatter'
+  primitive: PrimitiveType
+  count: number
+  /** World X of the scatter zone centre. Default 0. */
+  centerX?: number
+  /** World Z of the scatter zone centre. Default 0. */
+  centerZ?: number
+  /** Inner exclusion radius — no objects within this distance from centre. Default 0. */
+  innerRadius?: number
+  /** Outer radius of the scatter zone. */
+  outerRadius: number
+  /** Minimum scale applied to each instance. Default 0.75. */
+  scaleMin?: number
+  /** Maximum scale applied to each instance. Default 1.25. */
+  scaleMax?: number
+  /** PRNG seed for deterministic layout. Change to get a different arrangement. Default 0. */
+  seed?: number
+}
+
+export type SceneObject = PlacedObject | ScatterField
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export interface SceneDescriptor {
   terrain?: TerrainDescriptor
   atmosphere?: AtmosphereDescriptor
   character?: CharacterDescriptor
+  objects?: SceneObject[]
 }
