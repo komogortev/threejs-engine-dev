@@ -7,6 +7,7 @@ import type {
   SceneObject,
   PlacedObject,
   ScatterField,
+  GltfObject,
   PrimitiveType,
 } from './SceneDescriptor'
 import { TerrainSampler } from './TerrainSampler'
@@ -105,7 +106,7 @@ export class SceneBuilder {
     ctx.scene.add(character)
 
     // ── Objects ───────────────────────────────────────────────────────────────
-    SceneBuilder.placeObjects(ctx.scene, descriptor.objects ?? [], sampler, radius, seaLevel)
+    await SceneBuilder.placeObjects(ctx, descriptor.objects ?? [], sampler, radius, seaLevel)
 
     return { sampler, character, terrainMesh, effectiveRadius: radius }
   }
@@ -232,26 +233,29 @@ export class SceneBuilder {
   // ─── Object placement ─────────────────────────────────────────────────────────
 
   /**
-   * Iterates the objects array and dispatches each entry to either explicit
-   * placement or scatter placement.
-   *
-   * `seaLevel` is the cut-off: objects whose terrain Y is below sea level are
-   * silently skipped — authors should avoid scattering trees into lakes.
+   * Iterates the objects array and dispatches each entry to the appropriate placer.
+   * GLTF loads run in parallel via Promise.all for fast scene build.
    */
-  private static placeObjects(
-    scene: THREE.Scene,
+  private static async placeObjects(
+    ctx: ThreeContext,
     objects: SceneObject[],
     sampler: TerrainSampler,
     terrainRadius: number,
     seaLevel: number,
-  ): void {
+  ): Promise<void> {
+    const gltfTasks: Promise<void>[] = []
+
     for (const obj of objects) {
       if (obj.type === 'scatter') {
-        SceneBuilder.placeScatter(scene, obj as ScatterField, sampler, terrainRadius, seaLevel)
+        SceneBuilder.placeScatter(ctx.scene, obj as ScatterField, sampler, terrainRadius, seaLevel)
+      } else if (obj.type === 'gltf') {
+        gltfTasks.push(SceneBuilder.placeGltf(ctx, obj as GltfObject, sampler, seaLevel))
       } else {
-        SceneBuilder.placeExplicit(scene, obj as PlacedObject, sampler, seaLevel)
+        SceneBuilder.placeExplicit(ctx.scene, obj as PlacedObject, sampler, seaLevel)
       }
     }
+
+    await Promise.all(gltfTasks)
   }
 
   /** Places a single explicitly-positioned primitive. */
@@ -270,6 +274,40 @@ export class SceneBuilder {
     mesh.position.set(obj.x, terrainY + offset * scale, obj.z)
     mesh.rotation.y = obj.rotationY ?? 0
     scene.add(mesh)
+  }
+
+  /**
+   * Loads a GLTF/GLB model and places it at the given world position.
+   * On load failure, drops a red wireframe box as a visible error indicator.
+   */
+  private static async placeGltf(
+    ctx: ThreeContext,
+    obj: GltfObject,
+    sampler: TerrainSampler,
+    seaLevel: number,
+  ): Promise<void> {
+    const terrainY = sampler.sample(obj.x, obj.z)
+    if (terrainY < seaLevel) return
+
+    const scale = obj.scale ?? 1
+
+    try {
+      const gltf  = await ctx.assets.loadGLTF(obj.url)
+      const model = gltf.scene.clone(true)
+      model.scale.setScalar(scale)
+      model.rotation.y  = obj.rotationY ?? 0
+      model.position.set(obj.x, terrainY, obj.z)
+      ctx.scene.add(model)
+    } catch {
+      // Error placeholder: red wireframe box so mismatched URLs are obvious
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 2, 1),
+        new THREE.MeshStandardMaterial({ color: 0xff2222, wireframe: true }),
+      )
+      box.position.set(obj.x, terrainY + 1, obj.z)
+      ctx.scene.add(box)
+      console.warn(`[SceneBuilder] GLTF load failed: ${obj.url}`)
+    }
   }
 
   /**

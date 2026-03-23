@@ -225,7 +225,27 @@ export interface ScatterField {
   seed?: number
 }
 
-export type SceneObject = PlacedObject | ScatterField
+/**
+ * A GLTF/GLB model placed at an explicit world position.
+ * The model's pivot sits at terrain Y (no automatic base offset — set `scale`
+ * and inspect the loaded model to determine any manual Y adjustment needed).
+ *
+ * @example
+ * { type: 'gltf', url: '/models/lantern.glb', x: 12, z: -8, scale: 0.5 }
+ */
+export interface GltfObject {
+  type: 'gltf'
+  /** Path served from /public, e.g. '/models/tree.glb' */
+  url: string
+  x: number
+  z: number
+  /** Uniform scale multiplier. Default 1. */
+  scale?: number
+  /** Y-axis rotation in radians. Default 0. */
+  rotationY?: number
+}
+
+export type SceneObject = PlacedObject | ScatterField | GltfObject
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 

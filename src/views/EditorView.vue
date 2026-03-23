@@ -4,9 +4,9 @@ import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { useShellContext } from '@/composables/useShellContext'
 import { EditorSceneModule } from '@/editor/EditorSceneModule'
-import type { EditorState, EditorTool, GizmoMode } from '@/editor/EditorSceneModule'
-import type { PlacedObject, PrimitiveType } from '@/scene/SceneDescriptor'
-import { copyObjectsToClipboard } from '@/editor/DescriptorExporter'
+import type { EditorState, EditorTool, EditorObject, GizmoMode } from '@/editor/EditorSceneModule'
+import type { PrimitiveType, GltfObject } from '@/scene/SceneDescriptor'
+import { copyObjectsToClipboard, copyDescriptorToClipboard } from '@/editor/DescriptorExporter'
 import { scene01 } from '@/scenes/scene-01'
 
 // ─── Engine setup ─────────────────────────────────────────────────────────────
@@ -18,31 +18,51 @@ const container = ref<HTMLElement>()
 const engine = new ThreeModule()
 const editor = new EditorSceneModule(scene01)
 
-// ─── Reactive editor state (synced from module via callback) ──────────────────
+// ─── Reactive editor state ────────────────────────────────────────────────────
 
 const state = ref<EditorState>({
   objects:       [],
   selectedIndex: null,
   activeTool:    'select',
   gizmoMode:     'translate',
+  activeGltfUrl: '',
 })
 
-const selected = computed<PlacedObject | null>(() =>
+const selected = computed<EditorObject | null>(() =>
   state.value.selectedIndex !== null
-    ? state.value.objects[state.value.selectedIndex] ?? null
+    ? (state.value.objects[state.value.selectedIndex] ?? null)
     : null,
 )
 
+// ─── GLTF tool state ──────────────────────────────────────────────────────────
+
+const gltfUrlInput = ref('')
+
+function applyGltfUrl(): void {
+  const url = gltfUrlInput.value.trim()
+  if (!url) return
+  editor.setActiveGltfUrl(url)
+  editor.setActiveTool('gltf')
+}
+
 // ─── Clipboard ────────────────────────────────────────────────────────────────
 
-const copyLabel  = ref('Copy objects[]')
-const copyTimeout = ref<ReturnType<typeof setTimeout>>()
+const copyObjLabel  = ref('Copy objects[]')
+const copyDescLabel = ref('Copy full scene')
+const copyTimeout   = ref<ReturnType<typeof setTimeout>>()
+
+function flash(label: Ref<string>, ok: boolean, reset: string): void {
+  label.value = ok ? 'Copied!' : 'Failed'
+  clearTimeout(copyTimeout.value)
+  copyTimeout.value = setTimeout(() => { label.value = reset }, 2000)
+}
 
 async function copyObjects(): Promise<void> {
-  const ok = await copyObjectsToClipboard(editor.getObjects())
-  copyLabel.value = ok ? 'Copied!' : 'Failed'
-  clearTimeout(copyTimeout.value)
-  copyTimeout.value = setTimeout(() => { copyLabel.value = 'Copy objects[]' }, 2000)
+  flash(copyObjLabel, await copyObjectsToClipboard(editor.getObjects()), 'Copy objects[]')
+}
+
+async function copyDescriptor(): Promise<void> {
+  flash(copyDescLabel, await copyDescriptorToClipboard(scene01, editor.getObjects()), 'Copy full scene')
 }
 
 // ─── Tool helpers ─────────────────────────────────────────────────────────────
@@ -61,7 +81,17 @@ function setMode(mode: GizmoMode): void   { editor.setGizmoMode(mode) }
 function selectItem(idx: number): void    { editor.selectByIndex(idx) }
 function deleteSelected(): void           { editor.deleteSelected() }
 
-function objectLabel(obj: PlacedObject, idx: number): string {
+function objectIcon(obj: EditorObject): string {
+  if (obj.type === 'gltf') return '📦'
+  return PRIMITIVE_ICONS[obj.type as PrimitiveType] ?? '?'
+}
+
+function objectLabel(obj: EditorObject, idx: number): string {
+  if (obj.type === 'gltf') {
+    // Show basename of URL: /models/tree.glb → tree.glb
+    const parts = (obj as GltfObject).url.split('/')
+    return parts[parts.length - 1] ?? 'model'
+  }
   const counts: Record<string, number> = {}
   for (let i = 0; i < idx; i++) {
     const t = state.value.objects[i]?.type ?? ''
@@ -75,9 +105,7 @@ function objectLabel(obj: PlacedObject, idx: number): string {
 
 onMounted(async () => {
   if (!container.value) return
-
   editor.onStateChanged = (s) => { state.value = s }
-
   await engine.mount(container.value, context)
   await engine.mountChild('editor', editor)
 })
@@ -86,6 +114,9 @@ onUnmounted(async () => {
   clearTimeout(copyTimeout.value)
   await engine.unmount()
 })
+
+// helper type re-export so template can use it
+type Ref<T> = ReturnType<typeof ref<T>>
 </script>
 
 <template>
@@ -98,12 +129,11 @@ onUnmounted(async () => {
     <div class="absolute top-0 left-0 right-64 h-11 flex items-center gap-2 px-4
                 bg-black/60 backdrop-blur-sm border-b border-white/10">
 
-      <!-- Back button -->
       <button class="nav-btn" @click="router.push('/')">← Menu</button>
 
       <div class="w-px h-5 bg-white/10" />
 
-      <!-- Gizmo mode (only when selection exists) -->
+      <!-- Gizmo mode (only when something is selected) -->
       <template v-if="state.selectedIndex !== null">
         <button
           v-for="m in (['translate', 'rotate', 'scale'] as GizmoMode[])"
@@ -119,7 +149,6 @@ onUnmounted(async () => {
 
       <div class="flex-1" />
 
-      <!-- Object count -->
       <span class="text-white/30 text-xs font-mono">
         {{ state.objects.length }} object{{ state.objects.length !== 1 ? 's' : '' }}
       </span>
@@ -129,11 +158,10 @@ onUnmounted(async () => {
     <div class="absolute top-0 right-0 bottom-0 w-64 flex flex-col
                 bg-black/70 backdrop-blur-md border-l border-white/10 text-white text-xs">
 
-      <!-- ── Primitive picker ── -->
+      <!-- ── Primitive tools ── -->
       <div class="px-3 pt-3 pb-2 border-b border-white/10">
-        <p class="text-white/30 uppercase tracking-widest text-[10px] mb-2">Place</p>
+        <p class="text-white/30 uppercase tracking-widest text-[10px] mb-2">Primitives</p>
 
-        <!-- Select (pointer) tool -->
         <button
           :class="['tool-btn w-full mb-1', state.activeTool === 'select' ? 'tool-active' : 'tool-idle']"
           @click="setTool('select')"
@@ -141,7 +169,6 @@ onUnmounted(async () => {
           <span class="text-sm">⬡</span> Select / Move
         </button>
 
-        <!-- Primitive type buttons -->
         <div class="grid grid-cols-2 gap-1">
           <button
             v-for="prim in PRIMITIVES"
@@ -153,9 +180,41 @@ onUnmounted(async () => {
             <span class="capitalize">{{ prim }}</span>
           </button>
         </div>
+      </div>
 
-        <p class="mt-2 text-white/20 text-[10px] leading-snug">
-          Click terrain to place. Click object to select.
+      <!-- ── GLTF tool ── -->
+      <div class="px-3 py-2 border-b border-white/10">
+        <p class="text-white/30 uppercase tracking-widest text-[10px] mb-2">GLTF Model</p>
+
+        <div class="flex gap-1 mb-1">
+          <input
+            v-model="gltfUrlInput"
+            type="text"
+            placeholder="/models/tree.glb"
+            class="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-white/10
+                   text-white/80 placeholder-white/20 focus:outline-none focus:border-indigo-400
+                   text-[11px] font-mono"
+            @keydown.enter="applyGltfUrl"
+          />
+          <button
+            class="px-2 py-1 rounded bg-indigo-700/60 hover:bg-indigo-600/80 text-indigo-200
+                   hover:text-white transition-colors text-[11px] shrink-0"
+            @click="applyGltfUrl"
+          >
+            Use
+          </button>
+        </div>
+
+        <button
+          v-if="state.activeGltfUrl"
+          :class="['tool-btn w-full', state.activeTool === 'gltf' ? 'tool-active' : 'tool-idle']"
+          @click="setTool('gltf')"
+        >
+          📦 <span class="truncate font-mono text-[10px]">{{ state.activeGltfUrl.split('/').pop() }}</span>
+        </button>
+
+        <p class="mt-1.5 text-white/20 text-[10px] leading-snug">
+          Type a /public path, hit Use, then click terrain to place.
         </p>
       </div>
 
@@ -166,10 +225,7 @@ onUnmounted(async () => {
         <div class="flex items-center gap-2">
           <span class="text-white/50 w-16 shrink-0">Scale</span>
           <input
-            type="range"
-            min="0.1"
-            max="6"
-            step="0.05"
+            type="range" min="0.1" max="6" step="0.05"
             :value="selected.scale ?? 1"
             class="flex-1 accent-indigo-500"
             @input="editor.updateSelectedScale(parseFloat(($event.target as HTMLInputElement).value))"
@@ -182,10 +238,7 @@ onUnmounted(async () => {
         <div class="flex items-center gap-2">
           <span class="text-white/50 w-16 shrink-0">Rotation</span>
           <input
-            type="range"
-            min="0"
-            :max="(Math.PI * 2).toFixed(4)"
-            step="0.05"
+            type="range" min="0" :max="(Math.PI * 2).toFixed(4)" step="0.05"
             :value="selected.rotationY ?? 0"
             class="flex-1 accent-indigo-500"
             @input="editor.updateSelectedRotationY(parseFloat(($event.target as HTMLInputElement).value))"
@@ -202,10 +255,10 @@ onUnmounted(async () => {
 
         <button
           class="w-full py-1 rounded bg-red-900/40 hover:bg-red-800/60 text-red-300
-                 hover:text-red-100 transition-colors text-xs"
+                 hover:text-red-100 transition-colors"
           @click="deleteSelected"
         >
-          Delete  <kbd class="opacity-50 text-[10px]">Del</kbd>
+          Delete <kbd class="opacity-50 text-[10px]">Del</kbd>
         </button>
       </div>
 
@@ -216,7 +269,7 @@ onUnmounted(async () => {
         </p>
 
         <p v-if="state.objects.length === 0" class="text-white/20 text-[10px] mt-4 text-center leading-relaxed">
-          No objects placed yet.<br>Pick a type above and<br>click the terrain.
+          No objects placed yet.<br>Pick a primitive or set a<br>GLTF URL above.
         </p>
 
         <ul class="space-y-0.5">
@@ -231,7 +284,7 @@ onUnmounted(async () => {
             ]"
             @click="selectItem(idx)"
           >
-            <span class="text-sm leading-none">{{ PRIMITIVE_ICONS[obj.type as PrimitiveType] }}</span>
+            <span class="text-sm leading-none">{{ objectIcon(obj) }}</span>
             <span class="font-mono text-[11px] flex-1 truncate">{{ objectLabel(obj, idx) }}</span>
             <span class="font-mono text-[10px] text-white/25">×{{ (obj.scale ?? 1).toFixed(1) }}</span>
           </li>
@@ -239,22 +292,33 @@ onUnmounted(async () => {
       </div>
 
       <!-- ── Export ── -->
-      <div class="px-3 py-3 border-t border-white/10">
-        <p class="text-white/30 text-[10px] mb-2">
-          Paste into <code class="text-indigo-400">SceneDescriptor.objects</code>
-        </p>
+      <div class="px-3 py-3 border-t border-white/10 space-y-1.5">
+        <!-- Objects[] only — paste into existing descriptor -->
         <button
-          class="w-full py-1.5 rounded bg-indigo-700/50 hover:bg-indigo-600/70 text-indigo-200
-                 hover:text-white transition-colors text-xs font-medium"
+          class="w-full py-1.5 rounded bg-indigo-900/50 hover:bg-indigo-800/70 text-indigo-300
+                 hover:text-white transition-colors font-medium disabled:opacity-40"
           :disabled="state.objects.length === 0"
           @click="copyObjects"
         >
-          {{ copyLabel }}
+          {{ copyObjLabel }}
         </button>
+
+        <!-- Full scene file — ready to save as src/scenes/scene-XX.ts -->
+        <button
+          class="w-full py-1.5 rounded bg-violet-900/50 hover:bg-violet-800/70 text-violet-300
+                 hover:text-white transition-colors font-medium"
+          @click="copyDescriptor"
+        >
+          {{ copyDescLabel }}
+        </button>
+
+        <p class="text-white/20 text-[10px] leading-snug">
+          "Full scene" includes terrain, atmosphere, scatter, and your placed objects — ready for a new <code class="text-indigo-400">src/scenes/</code> file.
+        </p>
       </div>
     </div>
 
-    <!-- ── Hints overlay ─────────────────────────────────────────────────────── -->
+    <!-- ── Hints ─────────────────────────────────────────────────────────────── -->
     <div class="absolute bottom-4 left-4 space-y-1 pointer-events-none">
       <p class="hint">Orbit: left-drag · Zoom: scroll · Right-click terrain: set orbit anchor</p>
       <p class="hint">T = move · R = rotate · S = scale · Esc = deselect · Del = delete</p>
