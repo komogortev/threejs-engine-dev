@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { clone as cloneSkinnedRoot } from 'three/addons/utils/SkeletonUtils.js'
 import type { ThreeContext } from '@base/threejs-engine'
 import type {
   SceneDescriptor,
@@ -243,7 +244,7 @@ export class SceneBuilder {
     if (url) {
       try {
         const gltf = await ctx.assets.loadGLTF(url)
-        const model = gltf.scene.clone(true)
+        const model = cloneSkinnedRoot(gltf.scene) as THREE.Object3D
         const scale = charDesc.modelScale ?? 1
         model.scale.setScalar(scale)
         convertUnlitToPbrRough(model)
@@ -262,7 +263,18 @@ export class SceneBuilder {
         const ry = charDesc.rotationY ?? 0
         if (ry !== 0) model.rotation.y = ry
 
-        root.userData['gltfAnimations'] = gltf.animations
+        const mergedClips = [...gltf.animations]
+        for (const clipUrl of charDesc.animationClipUrls ?? []) {
+          const u = clipUrl.trim()
+          if (!u) continue
+          try {
+            const animGltf = await ctx.assets.loadGLTF(u)
+            mergedClips.push(...animGltf.animations)
+          } catch (err) {
+            console.warn('[SceneBuilder] Optional animation clip URL failed:', u, err)
+          }
+        }
+        root.userData['gltfAnimations'] = mergedClips
 
         return { object: root, terrainYOffset: pivotY }
       } catch (err) {

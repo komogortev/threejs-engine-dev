@@ -11,6 +11,18 @@ export const UBC_STANDARD_FEMALE_GLTF = encodeURI(
   '/models/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Female_FullBody.gltf',
 )
 
+/**
+ * When you add **Universal Animation Library [Standard]** Godot/Unreal **glTF** clips under
+ * `public/animations/Universal Animation Library[Standard]/…`, list them here (encode with `encodeURI`).
+ * Same humanoid rig as Universal Base Characters — clips merge into `CharacterAnimationRig`.
+ *
+ * Example (uncomment when files exist):
+ * `encodeURI('/animations/Universal Animation Library[Standard]/Unreal-Godot/Walking.gltf')`
+ */
+export const UAL_STANDARD_ANIMATION_CLIP_URLS: string[] = [
+  // Add walking / idle glTF URLs here after extracting the pack.
+]
+
 export const scene01: SceneDescriptor = {
   terrain: {
     radius: 50,
@@ -64,6 +76,7 @@ export const scene01: SceneDescriptor = {
     modelScale: 1,
     /** Tweak if feet slide or model faces wrong way vs movement (−Z forward). */
     rotationY: 0,
+    animationClipUrls: UAL_STANDARD_ANIMATION_CLIP_URLS,
   },
   objects: [
     {

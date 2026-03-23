@@ -256,6 +256,12 @@ export interface CharacterDescriptor {
   terrainPivotYOffset?: number
   /** Added to root `rotation.y` after load (model forward vs engine −Z). Default 0. */
   rotationY?: number
+  /**
+   * Extra glTF/GLB URLs whose **animation clips** are merged onto the player (same skeleton / bone names).
+   * Quaternius **Universal Animation Library** Godot/Unreal exports match **Universal Base Characters**.
+   * Each file can be a single clip or a pack; all `animations[]` entries are appended.
+   */
+  animationClipUrls?: string[]
 }
 
 // ─── Objects ─────────────────────────────────────────────────────────────────
