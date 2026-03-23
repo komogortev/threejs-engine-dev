@@ -4,6 +4,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { BaseModule } from '@base/engine-core'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
+import { EnvironmentRuntime, type EnvironmentState } from '@/scene/EnvironmentRuntime'
 import { SceneBuilder } from '@/scene/SceneBuilder'
 import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from '@/scene/PrimitiveFactory'
 import type { TerrainSampler } from '@/scene/TerrainSampler'
@@ -13,6 +14,7 @@ import type {
   GltfObject,
   PrimitiveType,
   ScatterField,
+  AtmosphereDescriptor,
 } from '@/scene/SceneDescriptor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,6 +24,8 @@ export type GizmoMode  = 'translate' | 'rotate' | 'scale'
 
 /** All objects the editor can place — primitives and GLTF models. */
 export type EditorObject = PlacedObject | GltfObject
+
+export type { EnvironmentState }
 
 export interface EditorState {
   objects:              EditorObject[]
@@ -33,6 +37,8 @@ export interface EditorState {
   scatterFields:        ScatterField[]
   /** Which scatter zone is selected for property editing (null = none). */
   selectedScatterIndex: number | null
+  /** Fog, time-of-day, cloud params (see EnvironmentRuntime). */
+  environment:          EnvironmentState
 }
 
 // ─── Colours for scatter zone rings ──────────────────────────────────────────
@@ -171,6 +177,8 @@ export class EditorSceneModule extends BaseModule {
 
   private _scatterRings: THREE.Object3D[] = []
 
+  private _env!: EnvironmentRuntime
+
   // ── Ghost preview ───────────────────────────────────────────────────────────
 
   private _ghost: THREE.Object3D | null = null
@@ -226,6 +234,9 @@ export class EditorSceneModule extends BaseModule {
     // ── Scatter zone rings ────────────────────────────────────────────────────
     this._buildScatterRings(this._scatterFields)
 
+    // ── Atmosphere (fog always; sky/time/clouds when descriptor.dynamicSky) ───
+    this._env = EnvironmentRuntime.attachEditor(ctx, this.descriptor.atmosphere ?? {})
+
     // ── Register existing explicit objects as interactive ─────────────────────
     for (const item of placedItems) {
       await this._addTracked({ ...item } as EditorObject, ctx.scene)
@@ -270,7 +281,10 @@ export class EditorSceneModule extends BaseModule {
     canvas.addEventListener('contextmenu',  this._offContextMenu)
     window.addEventListener('keydown',      this._offKeyDown)
 
-    this._unregisterLoop = ctx.registerSystem('editor-orbit', () => { this.orbit.update() })
+    this._unregisterLoop = ctx.registerSystem('editor-frame', (delta) => {
+      this._env.update(delta)
+      this.orbit.update()
+    })
 
     this._emitState()
   }
@@ -280,6 +294,7 @@ export class EditorSceneModule extends BaseModule {
       clearTimeout(this._scatterRebuildTimer)
       this._scatterRebuildTimer = null
     }
+    this._env?.dispose()
     const canvas = this._ctx.renderer.domElement
     canvas.removeEventListener('pointerdown',  this._offPointerDown)
     canvas.removeEventListener('pointermove',  this._offPointerMove)
@@ -462,6 +477,56 @@ export class EditorSceneModule extends BaseModule {
 
   getObjects(): EditorObject[] {
     return this._objects.map((o) => ({ ...o }))
+  }
+
+  /** Atmosphere block merged for “Copy full scene” (includes live fog / time / clouds). */
+  getAtmosphereForExport(): AtmosphereDescriptor {
+    return this._env.toAtmospherePatch(this.descriptor.atmosphere ?? {})
+  }
+
+  setEnvironmentPhase(phase: number): void {
+    this._env.setPhase(phase)
+    this._emitState()
+  }
+
+  setEnvironmentPhaseSpeed(speed: number): void {
+    this._env.setPhaseSpeed(speed)
+    this._emitState()
+  }
+
+  setEnvironmentFogDensity(d: number): void {
+    this._env.setFogDensity(d)
+    this._emitState()
+  }
+
+  setEnvironmentFogColor(hex: number): void {
+    this._env.setFogColor(hex)
+    this._emitState()
+  }
+
+  setCloudOpacity(o: number): void {
+    this._env.setCloudOpacity(o)
+    this._emitState()
+  }
+
+  setCloudScrollSpeed(s: number): void {
+    this._env.setCloudScrollSpeed(s)
+    this._emitState()
+  }
+
+  setCloudWind(x: number, z: number): void {
+    this._env.setCloudWind(x, z)
+    this._emitState()
+  }
+
+  setCloudVisibilityWindow(fromP: number, toP: number): void {
+    this._env.setCloudVisibilityWindow(fromP, toP)
+    this._emitState()
+  }
+
+  setCloudDensityCurve(night: number, noon: number): void {
+    this._env.setCloudDensityCurve(night, noon)
+    this._emitState()
   }
 
   // ─── Pointer handlers ─────────────────────────────────────────────────────────
@@ -823,6 +888,7 @@ export class EditorSceneModule extends BaseModule {
       activeGltfUrl:        this._activeGltfUrl,
       scatterFields:        this._scatterFields.map((f) => ({ ...f })),
       selectedScatterIndex: this._selectedScatterIndex,
+      environment:          this._env.getState(),
     })
   }
 }

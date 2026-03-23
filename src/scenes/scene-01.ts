@@ -17,24 +17,33 @@ export const scene01: SceneDescriptor = {
     ],
   },
   atmosphere: {
+    dynamicSky: true,
     fogColor: 0x06100a,
     fogDensity: 0.013,
     ambientColor: 0x1e3320,
-    ambientIntensity: 0.8,
-    lights: [
-      {
-        type: 'directional',
-        color: 0xfff0cc,
-        intensity: 1.3,
-        position: [6, 14, 7],
-      },
-      {
-        type: 'directional',
-        color: 0x0a1e5a,
-        intensity: 0.8,
-        position: [-8, 4, -10],
-      },
-    ],
+    ambientIntensity: 0.85,
+    time: {
+      initialPhase: 0.32,
+      phaseSpeed: 0,
+    },
+    sky: { model: 'physical' },
+    sunMoon: {
+      sunIntensity: 1.25,
+      moonIntensity: 0.2,
+    },
+    clouds: {
+      enabled: true,
+      height: 140,
+      scale: 800,
+      windX: 0.4,
+      windZ: 0.08,
+      scrollSpeed: 0.035,
+      opacity: 0.5,
+      visibleFrom: 0,
+      visibleTo: 1,
+      densityAtNight: 0.4,
+      densityAtNoon: 1,
+    },
   },
   character: {
     startPosition: [0, 0],

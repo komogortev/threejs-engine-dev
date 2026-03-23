@@ -5,10 +5,34 @@ import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { useShellContext } from '@/composables/useShellContext'
 import { EditorSceneModule } from '@/editor/EditorSceneModule'
-import type { EditorState, EditorTool, EditorObject, GizmoMode } from '@/editor/EditorSceneModule'
+import type { EditorState, EditorTool, EditorObject, GizmoMode, EnvironmentState } from '@/editor/EditorSceneModule'
 import type { PrimitiveType, GltfObject, ScatterField } from '@/scene/SceneDescriptor'
 import { copyObjectsToClipboard, copyDescriptorToClipboard } from '@/editor/DescriptorExporter'
 import { scene01 } from '@/scenes/scene-01'
+
+function defaultEnvironmentState(): EnvironmentState {
+  return {
+    dynamicSky:        false,
+    phase:             0.28,
+    phaseSpeed:        0,
+    fogDensity:        0.012,
+    fogColor:          0x080810,
+    skyModel:          'physical',
+    cloudEnabled:      false,
+    cloudOpacity:      0.55,
+    cloudScrollSpeed:  0.04,
+    cloudWindX:        0.35,
+    cloudWindZ:        0.12,
+    cloudVisibleFrom:  0,
+    cloudVisibleTo:    1,
+    cloudDensityNight: 0.35,
+    cloudDensityNoon:  1,
+  }
+}
+
+function hex6(n: number): string {
+  return `#${(n >>> 0).toString(16).padStart(6, '0')}`
+}
 
 // ─── Engine setup ─────────────────────────────────────────────────────────────
 
@@ -29,6 +53,7 @@ const state = ref<EditorState>({
   activeGltfUrl:       '',
   scatterFields:       [],
   selectedScatterIndex: null,
+  environment:         defaultEnvironmentState(),
 })
 
 const selected = computed<EditorObject | null>(() =>
@@ -74,7 +99,12 @@ async function copyObjects(): Promise<void> {
 async function copyDescriptor(): Promise<void> {
   flash(
     copyDescLabel,
-    await copyDescriptorToClipboard(scene01, editor.getObjects(), editor.getScatterFields()),
+    await copyDescriptorToClipboard(
+      scene01,
+      editor.getObjects(),
+      editor.getScatterFields(),
+      editor.getAtmosphereForExport(),
+    ),
     'Copy full scene',
   )
 }
@@ -442,8 +472,142 @@ onUnmounted(async () => {
         </button>
       </div>
 
+      <!-- ── Atmosphere: fog, time, clouds ── -->
+      <div class="px-3 py-2 border-b border-white/10 max-h-64 overflow-y-auto shrink-0">
+        <p class="text-white/30 uppercase tracking-widest text-[10px] mb-2">Atmosphere</p>
+
+        <div class="space-y-2 text-[10px]">
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0">Fog ρ</span>
+            <input
+              type="range" min="0" max="0.12" step="0.001"
+              :value="state.environment.fogDensity"
+              class="flex-1 accent-sky-500"
+              @input="editor.setEnvironmentFogDensity(parseFloat(($event.target as HTMLInputElement).value))"
+            />
+            <span class="font-mono text-white/50 w-10 text-right">{{ state.environment.fogDensity.toFixed(3) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0">Fog rgb</span>
+            <input
+              type="color"
+              class="h-7 w-12 rounded border border-white/20 cursor-pointer bg-transparent"
+              :value="hex6(state.environment.fogColor)"
+              @input="editor.setEnvironmentFogColor(parseInt(($event.target as HTMLInputElement).value.slice(1), 16))"
+            />
+            <span class="font-mono text-white/40 truncate">{{ hex6(state.environment.fogColor) }}</span>
+          </div>
+
+          <template v-if="state.environment.dynamicSky">
+            <p class="text-sky-400/80 text-[9px] uppercase tracking-wider pt-1">Day cycle</p>
+            <div class="flex items-center gap-2">
+              <span class="text-white/50 w-14 shrink-0">Phase</span>
+              <input
+                type="range" min="0" max="1" step="0.005"
+                :value="state.environment.phase"
+                class="flex-1 accent-amber-500"
+                @input="editor.setEnvironmentPhase(parseFloat(($event.target as HTMLInputElement).value))"
+              />
+              <span class="font-mono text-white/50 w-8 text-right">{{ state.environment.phase.toFixed(2) }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-white/50 w-14 shrink-0">Speed</span>
+              <input
+                type="range" min="0" max="0.01" step="0.0001"
+                :value="state.environment.phaseSpeed"
+                class="flex-1 accent-amber-500"
+                @input="editor.setEnvironmentPhaseSpeed(parseFloat(($event.target as HTMLInputElement).value))"
+              />
+              <span class="font-mono text-white/50 w-10 text-right">{{ state.environment.phaseSpeed.toFixed(4) }}</span>
+            </div>
+            <p class="text-white/25 text-[9px] leading-snug">
+              Phase 0≈night · 0.25↑dawn · 0.5 noon · 0.75↓dusk. Speed 0 = static.
+            </p>
+
+            <template v-if="state.environment.cloudEnabled">
+              <p class="text-sky-400/80 text-[9px] uppercase tracking-wider pt-1">Clouds (timeline)</p>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">Opacity</span>
+                <input
+                  type="range" min="0" max="1" step="0.02"
+                  :value="state.environment.cloudOpacity"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudOpacity(parseFloat(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">Scroll</span>
+                <input
+                  type="range" min="0" max="0.2" step="0.005"
+                  :value="state.environment.cloudScrollSpeed"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudScrollSpeed(parseFloat(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">Wind X</span>
+                <input
+                  type="range" min="-1" max="1" step="0.05"
+                  :value="state.environment.cloudWindX"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudWind(parseFloat(($event.target as HTMLInputElement).value), state.environment.cloudWindZ)"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">Wind Z</span>
+                <input
+                  type="range" min="-1" max="1" step="0.05"
+                  :value="state.environment.cloudWindZ"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudWind(state.environment.cloudWindX, parseFloat(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">On from</span>
+                <input
+                  type="range" min="0" max="1" step="0.02"
+                  :value="state.environment.cloudVisibleFrom"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudVisibilityWindow(parseFloat(($event.target as HTMLInputElement).value), state.environment.cloudVisibleTo)"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">On to</span>
+                <input
+                  type="range" min="0" max="1" step="0.02"
+                  :value="state.environment.cloudVisibleTo"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudVisibilityWindow(state.environment.cloudVisibleFrom, parseFloat(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">Den night</span>
+                <input
+                  type="range" min="0" max="2" step="0.05"
+                  :value="state.environment.cloudDensityNight"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudDensityCurve(parseFloat(($event.target as HTMLInputElement).value), state.environment.cloudDensityNoon)"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-white/50 w-14 shrink-0">Den noon</span>
+                <input
+                  type="range" min="0" max="2" step="0.05"
+                  :value="state.environment.cloudDensityNoon"
+                  class="flex-1 accent-slate-400"
+                  @input="editor.setCloudDensityCurve(state.environment.cloudDensityNight, parseFloat(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+            </template>
+          </template>
+          <p v-else class="text-white/25 text-[9px] leading-snug pt-1">
+            Set <code class="text-indigo-400">atmosphere.dynamicSky: true</code> in the scene file for sky, sun/moon, and cloud timeline.
+          </p>
+        </div>
+      </div>
+
       <!-- ── Object list ── -->
-      <div class="flex-1 overflow-y-auto px-3 py-2">
+      <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0">
         <p class="text-white/30 uppercase tracking-widest text-[10px] mb-1">
           Objects ({{ state.objects.length }})
         </p>
@@ -493,7 +657,7 @@ onUnmounted(async () => {
         </button>
 
         <p class="text-white/20 text-[10px] leading-snug">
-          "Full scene" includes terrain, atmosphere, scatter, and your placed objects — ready for a new <code class="text-indigo-400">src/scenes/</code> file.
+          Full export includes terrain, <strong class="text-white/40">atmosphere</strong> (fog + day cycle + clouds if enabled), scatter, and placed objects.
         </p>
       </div>
     </div>

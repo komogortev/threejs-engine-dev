@@ -150,8 +150,71 @@ export interface PointLight {
 
 export type LightDescriptor = DirectionalLight | PointLight
 
+// ─── Time / sky / clouds (optional; see docs/atmosphere-time-sky.md) ─────────
+
+/**
+ * Day-night phase on a 0→1 loop: 0 ≈ midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset.
+ */
+export interface TimeCycleDescriptor {
+  /** Starting phase when the scene loads. Default ~0.28 (morning). */
+  initialPhase?: number
+  /**
+   * How fast phase advances in **real time** (phase units per second).
+   * `0` = frozen (static lighting). Example: `1 / 600` ≈ one full day per 10 minutes.
+   */
+  phaseSpeed?: number
+}
+
+export type SkyModel = 'physical' | 'gradient'
+
+/**
+ * `physical` = Three.js Preetham analytic sky (sun-driven).
+ * `gradient` = cheap zenith/horizon sphere + sun disc highlight.
+ */
+export interface SkyDescriptor {
+  model?: SkyModel
+  zenithColor?: number
+  horizonColor?: number
+  /** Preetham tuning (physical only). */
+  turbidity?: number
+  rayleigh?: number
+  mieCoefficient?: number
+  mieDirectionalG?: number
+}
+
+export interface SunMoonDescriptor {
+  sunColor?: number
+  sunIntensity?: number
+  moonColor?: number
+  moonIntensity?: number
+  /** Phase offset of moon vs sun (default ~0.5 = opposite). */
+  moonPhaseOffset?: number
+  showDiscs?: boolean
+}
+
+/**
+ * Procedural scrolling cloud sheet; opacity/density can vary with day phase.
+ */
+export interface CloudLayerDescriptor {
+  enabled?: boolean
+  height?: number
+  scale?: number
+  /** Wind direction weights for UV scroll (stream direction). */
+  windX?: number
+  windZ?: number
+  /** Multiplier on scroll animation speed. */
+  scrollSpeed?: number
+  opacity?: number
+  /** Phase range [0,1) where layer is visible (wrap-aware blend at edges). */
+  visibleFrom?: number
+  visibleTo?: number
+  /** Density multiplier at night vs noon (shader blend). */
+  densityAtNight?: number
+  densityAtNoon?: number
+}
+
 export interface AtmosphereDescriptor {
-  /** Scene background and fog colour. */
+  /** Scene background and fog colour (flat mode; overridden by dynamic sky fog tint). */
   fogColor?: number        // default 0x080810
   /** Exponential fog density — 0.012 reaches fog at ~60 units. */
   fogDensity?: number      // default 0.012
@@ -160,6 +223,18 @@ export interface AtmosphereDescriptor {
   ambientIntensity?: number // default 0.9
   /** Custom lights. If omitted, a default key + rim rig is added. */
   lights?: LightDescriptor[]
+
+  /**
+   * When `true`, SceneBuilder skips built-in directional key/rim and **directional**
+   * entries in `lights` (point lights still added). Sun/moon + sky come from
+   * `EnvironmentRuntime` (time / sky / clouds).
+   */
+  dynamicSky?: boolean
+  time?: TimeCycleDescriptor
+  sky?: SkyDescriptor
+  sunMoon?: SunMoonDescriptor
+  /** One layer for now; array reserved for future stacking. */
+  clouds?: CloudLayerDescriptor | CloudLayerDescriptor[]
 }
 
 // ─── Character ───────────────────────────────────────────────────────────────

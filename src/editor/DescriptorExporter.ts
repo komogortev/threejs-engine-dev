@@ -3,6 +3,7 @@ import type {
   PlacedObject,
   GltfObject,
   ScatterField,
+  AtmosphereDescriptor,
 } from '@/scene/SceneDescriptor'
 
 export type EditorObject = PlacedObject | GltfObject
@@ -69,13 +70,18 @@ export function serializeDescriptor(
   base: SceneDescriptor,
   editorObjects: EditorObject[],
   scatterFieldsOverride?: ScatterField[],
+  atmosphereOverride?: AtmosphereDescriptor,
 ): string {
   const scatterFields =
     scatterFieldsOverride ??
     ((base.objects ?? []).filter((o) => o.type === 'scatter') as ScatterField[])
   const allObjects = [...scatterFields, ...editorObjects]
 
-  const merged: SceneDescriptor = { ...base, objects: allObjects.length > 0 ? allObjects : undefined }
+  const merged: SceneDescriptor = {
+    ...base,
+    atmosphere: atmosphereOverride ?? base.atmosphere,
+    objects:    allObjects.length > 0 ? allObjects : undefined,
+  }
 
   // Must match imports in SceneView / EditorView (`scene01` from @/scenes/scene-01).
   // If you paste into another file (e.g. scene-02.ts), rename the symbol to match.
@@ -90,8 +96,11 @@ export async function copyDescriptorToClipboard(
   base: SceneDescriptor,
   editorObjects: EditorObject[],
   scatterFieldsOverride?: ScatterField[],
+  atmosphereOverride?: AtmosphereDescriptor,
 ): Promise<boolean> {
-  return writeClipboard(serializeDescriptor(base, editorObjects, scatterFieldsOverride))
+  return writeClipboard(
+    serializeDescriptor(base, editorObjects, scatterFieldsOverride, atmosphereOverride),
+  )
 }
 
 // ─── TypeScript literal serializer ───────────────────────────────────────────

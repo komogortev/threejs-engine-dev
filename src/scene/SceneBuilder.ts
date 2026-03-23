@@ -63,10 +63,16 @@ export class SceneBuilder {
     const ambientIntensity = atmo.ambientIntensity ?? 0.9
     ctx.scene.add(new THREE.AmbientLight(ambientColor, ambientIntensity))
 
+    const dynamicSky = atmo.dynamicSky === true
+
     if (atmo.lights && atmo.lights.length > 0) {
-      for (const l of atmo.lights) SceneBuilder.addLight(ctx.scene, l)
-    } else {
-      // Default cinematic rig: warm key front-right + indigo rim back-left
+      for (const l of atmo.lights) {
+        if (dynamicSky && l.type === 'directional') continue
+        SceneBuilder.addLight(ctx.scene, l)
+      }
+    }
+
+    if (!dynamicSky && (!atmo.lights || atmo.lights.length === 0)) {
       const key = new THREE.DirectionalLight(0xffeedd, 1.4)
       key.position.set(6, 12, 5)
       ctx.scene.add(key)

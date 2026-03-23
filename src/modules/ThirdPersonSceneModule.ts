@@ -4,6 +4,7 @@ import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import type { InputAxisEvent } from '@base/input'
 import { SceneBuilder } from '@/scene/SceneBuilder'
+import { EnvironmentRuntime } from '@/scene/EnvironmentRuntime'
 import { TerrainSampler } from '@/scene/TerrainSampler'
 import type { SceneDescriptor } from '@/scene/SceneDescriptor'
 
@@ -92,6 +93,7 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   private offInput: (() => void) | null = null
   private unregisterSystem: (() => void) | null = null
+  private environment: EnvironmentRuntime | null = null
 
   // Reused each frame — no per-frame allocation
   private readonly _camDir    = new THREE.Vector3()
@@ -117,6 +119,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       this.character       = result.character
       this.sampler         = result.sampler
       this.effectiveRadius = result.effectiveRadius
+      this.environment      = EnvironmentRuntime.attachGame(ctx, this.descriptor.atmosphere ?? {})
     } else {
       this.effectiveRadius = this.cfg.groundRadius
       this.character = this.buildDefaultScene(ctx)
@@ -133,6 +136,7 @@ export class ThirdPersonSceneModule extends BaseModule {
     })
 
     this.unregisterSystem = ctx.registerSystem('third-person-scene', (delta) => {
+      this.environment?.update(delta)
       this.tick(delta, ctx)
     })
   }
@@ -140,6 +144,9 @@ export class ThirdPersonSceneModule extends BaseModule {
   protected async onUnmount(): Promise<void> {
     this.unregisterSystem?.()
     this.offInput?.()
+
+    this.environment?.dispose()
+    this.environment = null
 
     const ctx = this.context as ThreeContext
     ctx.scene.clear()
