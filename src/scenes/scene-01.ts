@@ -1,5 +1,16 @@
 import type { SceneDescriptor } from '@/scene/SceneDescriptor'
 
+/**
+ * Quaternius **Universal Base Characters [Standard]** — glTF in `Godot - UE` (paired `.bin` + textures).
+ * Use `encodeURI` so spaces and `[Standard]` survive in fetches.
+ */
+export const UBC_STANDARD_MALE_GLTF = encodeURI(
+  '/models/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf',
+)
+export const UBC_STANDARD_FEMALE_GLTF = encodeURI(
+  '/models/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Female_FullBody.gltf',
+)
+
 export const scene01: SceneDescriptor = {
   terrain: {
     radius: 50,
@@ -49,10 +60,10 @@ export const scene01: SceneDescriptor = {
   },
   character: {
     startPosition: [0, 0],
-    modelUrl: '/models/mccree/scene.gltf',
+    modelUrl: UBC_STANDARD_MALE_GLTF,
     modelScale: 1,
-    /** Applied on the **mesh** (not locomotion root) so walk direction still updates yaw. */
-    rotationY: Math.PI,
+    /** Tweak if feet slide or model faces wrong way vs movement (−Z forward). */
+    rotationY: 0,
   },
   objects: [
     {
