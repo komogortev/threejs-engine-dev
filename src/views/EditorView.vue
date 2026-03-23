@@ -96,7 +96,7 @@ onUnmounted(async () => {
 
     <!-- ── Top toolbar ──────────────────────────────────────────────────────── -->
     <div class="absolute top-0 left-0 right-64 h-11 flex items-center gap-2 px-4
-                bg-black/60 backdrop-blur-sm border-b border-white/8">
+                bg-black/60 backdrop-blur-sm border-b border-white/10">
 
       <!-- Back button -->
       <button class="nav-btn" @click="router.push('/')">← Menu</button>
@@ -127,10 +127,10 @@ onUnmounted(async () => {
 
     <!-- ── Right sidebar ─────────────────────────────────────────────────────── -->
     <div class="absolute top-0 right-0 bottom-0 w-64 flex flex-col
-                bg-black/70 backdrop-blur-md border-l border-white/8 text-white text-xs">
+                bg-black/70 backdrop-blur-md border-l border-white/10 text-white text-xs">
 
       <!-- ── Primitive picker ── -->
-      <div class="px-3 pt-3 pb-2 border-b border-white/8">
+      <div class="px-3 pt-3 pb-2 border-b border-white/10">
         <p class="text-white/30 uppercase tracking-widest text-[10px] mb-2">Place</p>
 
         <!-- Select (pointer) tool -->
@@ -160,7 +160,7 @@ onUnmounted(async () => {
       </div>
 
       <!-- ── Selected properties ── -->
-      <div v-if="selected" class="px-3 py-2 border-b border-white/8 space-y-2">
+      <div v-if="selected" class="px-3 py-2 border-b border-white/10 space-y-2">
         <p class="text-white/30 uppercase tracking-widest text-[10px]">Selected</p>
 
         <div class="flex items-center gap-2">
@@ -239,7 +239,7 @@ onUnmounted(async () => {
       </div>
 
       <!-- ── Export ── -->
-      <div class="px-3 py-3 border-t border-white/8">
+      <div class="px-3 py-3 border-t border-white/10">
         <p class="text-white/30 text-[10px] mb-2">
           Paste into <code class="text-indigo-400">SceneDescriptor.objects</code>
         </p>
@@ -264,7 +264,7 @@ onUnmounted(async () => {
 
 <style scoped>
 .nav-btn {
-  @apply px-3 py-1 rounded text-white/50 hover:text-white hover:bg-white/8
+  @apply px-3 py-1 rounded text-white/50 hover:text-white hover:bg-white/10
          text-xs font-medium transition-colors;
 }
 
@@ -272,13 +272,13 @@ onUnmounted(async () => {
   @apply px-3 py-1 rounded text-xs font-medium transition-colors flex items-center;
 }
 .mode-active { @apply bg-indigo-600 text-white; }
-.mode-idle   { @apply text-white/50 hover:bg-white/8 hover:text-white; }
+.mode-idle   { @apply text-white/50 hover:bg-white/10 hover:text-white; }
 
 .tool-btn {
   @apply flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors;
 }
 .tool-active { @apply bg-indigo-600/60 text-white ring-1 ring-indigo-400/50; }
-.tool-idle   { @apply text-white/60 hover:bg-white/8 hover:text-white/90; }
+.tool-idle   { @apply text-white/60 hover:bg-white/10 hover:text-white/90; }
 
 .hint {
   @apply text-white/20 text-[10px] font-mono tracking-wider;
