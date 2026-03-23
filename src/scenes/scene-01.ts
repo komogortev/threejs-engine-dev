@@ -111,7 +111,7 @@ export const scene01: SceneDescriptor = {
     },
     {
       type: 'gltf',
-      url: '/nidels/dirty_stones_pile.glb',
+      url: '/models/dirty_stones_pile.glb',
       x: -0.72,
       z: 8.16,
       scale: 1,
