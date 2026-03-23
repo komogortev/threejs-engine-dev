@@ -78,7 +78,7 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   private readonly player: PlayerController
 
-  private character!: THREE.Mesh
+  private character!: THREE.Object3D
   private sampler?: TerrainSampler
   private effectiveRadius = 50
 
@@ -98,7 +98,7 @@ export class ThirdPersonSceneModule extends BaseModule {
     this.player     = new PlayerController({
       characterSpeed: this.cfg.characterSpeed,
       facingLerp: this.cfg.facingLerp,
-      halfHeight: PLAYER_CAPSULE_HALF_HEIGHT,
+      terrainYOffset: PLAYER_CAPSULE_HALF_HEIGHT,
     })
   }
 
@@ -117,6 +117,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       this.character       = result.character
       this.sampler         = result.sampler
       this.effectiveRadius = result.effectiveRadius
+      this.player.setTerrainYOffset(result.characterTerrainYOffset)
       this.environment      = EnvironmentRuntime.attachGame(ctx, this.descriptor.atmosphere ?? {})
     } else {
       this.effectiveRadius = this.cfg.groundRadius
@@ -163,7 +164,7 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   // ─── Default flat-disc scene (no descriptor) ─────────────────────────────────
 
-  private buildDefaultScene(ctx: ThreeContext): THREE.Mesh {
+  private buildDefaultScene(ctx: ThreeContext): THREE.Object3D {
     const { fogColor, groundColor, groundRadius } = this.cfg
 
     ctx.scene.background = new THREE.Color(fogColor)

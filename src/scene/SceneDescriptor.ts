@@ -242,6 +242,20 @@ export interface AtmosphereDescriptor {
 export interface CharacterDescriptor {
   /** [x, z] spawn point. Y is clamped to terrain surface automatically. */
   startPosition?: [number, number]
+  /**
+   * Public URL to a GLTF/GLB (e.g. `/models/hero/scene.gltf`).
+   * When set, `SceneBuilder` loads via `AssetLoader`, aligns feet to local Y=0, and parents under a root `Group`.
+   * On load failure, falls back to the capsule placeholder.
+   */
+  modelUrl?: string
+  /** Uniform scale applied before bounding-box alignment. Default 1. */
+  modelScale?: number
+  /** Extra local Y offset after foot alignment (up/down tweak). Default 0. */
+  modelYOffset?: number
+  /** World-space Y offset from sampled terrain to character **root** when grounded (feet pivot ⇒ 0). Capsule uses capsule half-height. */
+  terrainPivotYOffset?: number
+  /** Added to root `rotation.y` after load (model forward vs engine −Z). Default 0. */
+  rotationY?: number
 }
 
 // ─── Objects ─────────────────────────────────────────────────────────────────

@@ -18,15 +18,17 @@ export const scene01: SceneDescriptor = {
   },
   atmosphere: {
     dynamicSky: true,
-    fogColor: 0x06100a,
-    fogDensity: 0.013,
+    fogColor: 0x1fdb93,
+    fogDensity: 0.011,
     ambientColor: 0x1e3320,
     ambientIntensity: 0.85,
     time: {
-      initialPhase: 0.32,
-      phaseSpeed: 0,
+      initialPhase: 0.3438,
+      phaseSpeed: 0.0051,
     },
-    sky: { model: 'physical' },
+    sky: {
+      model: 'physical',
+    },
     sunMoon: {
       sunIntensity: 1.25,
       moonIntensity: 0.2,
@@ -36,9 +38,9 @@ export const scene01: SceneDescriptor = {
       height: 140,
       scale: 800,
       windX: 0.4,
-      windZ: 0.08,
+      windZ: -0.5,
       scrollSpeed: 0.035,
-      opacity: 0.5,
+      opacity: 0.76,
       visibleFrom: 0,
       visibleTo: 1,
       densityAtNight: 0.4,
@@ -47,6 +49,8 @@ export const scene01: SceneDescriptor = {
   },
   character: {
     startPosition: [0, 0],
+    modelUrl: '/models/mccree/scene.gltf',
+    modelScale: 1,
   },
   objects: [
     {

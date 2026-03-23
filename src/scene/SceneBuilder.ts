@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { ThreeContext } from '@base/threejs-engine'
 import type {
   SceneDescriptor,
+  CharacterDescriptor,
   LightDescriptor,
   TerrainDescriptor,
   SceneObject,
@@ -18,7 +19,10 @@ import { PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
 
 export interface SceneBuilderResult {
   sampler: TerrainSampler
-  character: THREE.Mesh
+  /** Locomotion root: capsule mesh or `Group` with loaded GLTF; driven by `PlayerController` pose. */
+  character: THREE.Object3D
+  /** Passed to `PlayerController.setTerrainYOffset` — capsule half-height or 0 for foot-grounded GLTF. */
+  characterTerrainYOffset: number
   terrainMesh: THREE.Mesh
   effectiveRadius: number
   /** All procedural scatter instances live under this group (editor can rebuild in place). */
@@ -107,8 +111,9 @@ export class SceneBuilder {
     // ── Character ─────────────────────────────────────────────────────────────
     const [startX, startZ] = charDesc.startPosition ?? [0, 0]
     const groundY = sampler.sample(startX, startZ)
-    const character = SceneBuilder.buildCharacter()
-    character.position.set(startX, groundY + PLAYER_CAPSULE_HALF_HEIGHT, startZ)
+    const { object: character, terrainYOffset: characterTerrainYOffset } =
+      await SceneBuilder.buildCharacter(ctx, charDesc)
+    character.position.set(startX, groundY + characterTerrainYOffset, startZ)
     ctx.scene.add(character)
 
     // ── Objects ───────────────────────────────────────────────────────────────
@@ -125,7 +130,14 @@ export class SceneBuilder {
       scatterRoot,
     )
 
-    return { sampler, character, terrainMesh, effectiveRadius: radius, scatterRoot }
+    return {
+      sampler,
+      character,
+      characterTerrainYOffset,
+      terrainMesh,
+      effectiveRadius: radius,
+      scatterRoot,
+    }
   }
 
   // ─── Terrain mesh ─────────────────────────────────────────────────────────────
@@ -216,17 +228,55 @@ export class SceneBuilder {
     return mesh
   }
 
-  // ─── Character placeholder ────────────────────────────────────────────────────
+  // ─── Character (capsule or GLTF) ───────────────────────────────────────────
 
-  /** Capsule mesh. Swap this for a GLTF skin in a future phase. */
-  private static buildCharacter(): THREE.Mesh {
+  /**
+   * Capsule fallback, or GLTF clone with feet aligned to local Y=0 under a named root group.
+   * `terrainPivotYOffset` is world units above sampled ground for the root pivot when grounded.
+   */
+  private static async buildCharacter(
+    ctx: ThreeContext,
+    charDesc: CharacterDescriptor,
+  ): Promise<{ object: THREE.Object3D; terrainYOffset: number }> {
+    const url = charDesc.modelUrl?.trim()
+    if (url) {
+      try {
+        const gltf = await ctx.assets.loadGLTF(url)
+        const model = gltf.scene.clone(true)
+        const scale = charDesc.modelScale ?? 1
+        model.scale.setScalar(scale)
+
+        const root = new THREE.Group()
+        root.name = 'character-root'
+        root.add(model)
+
+        root.updateMatrixWorld(true)
+        const box = new THREE.Box3().setFromObject(root)
+        model.position.y -= box.min.y
+        model.position.y += charDesc.modelYOffset ?? 0
+
+        const pivotY = charDesc.terrainPivotYOffset ?? 0
+        const ry = charDesc.rotationY ?? 0
+        if (ry !== 0) root.rotation.y = ry
+
+        return { object: root, terrainYOffset: pivotY }
+      } catch (err) {
+        console.warn('[SceneBuilder] GLTF character failed, using capsule:', url, err)
+      }
+    }
+
     const geo = new THREE.CapsuleGeometry(0.35, 1.0, 8, 16)
     const mat = new THREE.MeshStandardMaterial({
       color: 0x6366f1,
       roughness: 0.5,
       metalness: 0.2,
     })
-    return new THREE.Mesh(geo, mat)
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.name = 'character-capsule'
+    const ry = charDesc.rotationY ?? 0
+    if (ry !== 0) mesh.rotation.y = ry
+    const pivotY = charDesc.terrainPivotYOffset ?? PLAYER_CAPSULE_HALF_HEIGHT
+    return { object: mesh, terrainYOffset: pivotY }
   }
 
   // ─── Lights ───────────────────────────────────────────────────────────────────

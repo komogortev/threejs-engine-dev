@@ -30,19 +30,23 @@ export interface PlayerControllerConfig {
   facingLerp: number
   /** Distance inside playable radius before edge clamp (matches previous 1.5 m margin). */
   edgeMargin: number
-  halfHeight: number
+  /**
+   * Initial world Y offset from sampled terrain to character **root** when grounded.
+   * Capsule (centre pivot): use {@link PLAYER_CAPSULE_HALF_HEIGHT}. GLTF (feet pivot): usually 0 — override via {@link setTerrainYOffset} after `SceneBuilder` if needed.
+   */
+  terrainYOffset: number
 }
 
 const DEFAULT_CFG: PlayerControllerConfig = {
   characterSpeed: 7,
   facingLerp: 12,
   edgeMargin: 1.5,
-  halfHeight: PLAYER_CAPSULE_HALF_HEIGHT,
+  terrainYOffset: PLAYER_CAPSULE_HALF_HEIGHT,
 }
 
 export interface PlayerControllerTickContext {
   camera: THREE.PerspectiveCamera
-  character: THREE.Mesh
+  character: THREE.Object3D
   sampler: TerrainSampler | undefined
   /** Outer limit of playable disc (world XZ). */
   playableRadius: number
@@ -64,6 +68,9 @@ function lerpAngle(current: number, target: number, t: number): number {
 export class PlayerController {
   private readonly cfg: PlayerControllerConfig
 
+  /** Ground contact offset in world Y; updated when swapping capsule ↔ GLTF. */
+  private terrainYOffset: number
+
   private facing = 0
   private readonly moveIntent = { x: 0, y: 0 }
   private readonly velocity = new THREE.Vector3()
@@ -76,6 +83,12 @@ export class PlayerController {
 
   constructor(cfg: Partial<PlayerControllerConfig> = {}) {
     this.cfg = { ...DEFAULT_CFG, ...cfg }
+    this.terrainYOffset = this.cfg.terrainYOffset
+  }
+
+  /** Call after `SceneBuilder` when character pivot height differs (e.g. GLTF feet vs capsule centre). */
+  setTerrainYOffset(worldOffset: number): void {
+    this.terrainYOffset = worldOffset
   }
 
   setMoveIntent(x: number, y: number): void {
@@ -108,7 +121,7 @@ export class PlayerController {
 
   tick(delta: number, ctx: PlayerControllerTickContext): void {
     const { camera, character, sampler, playableRadius } = ctx
-    const { characterSpeed, facingLerp, edgeMargin, halfHeight } = this.cfg
+    const { characterSpeed, facingLerp, edgeMargin } = this.cfg
 
     if (this.jumpBufferTime > 0) {
       this.jumpBufferTime = Math.max(0, this.jumpBufferTime - delta)
@@ -156,7 +169,7 @@ export class PlayerController {
 
     if (sampler) {
       const groundY = sampler.sample(character.position.x, character.position.z)
-      character.position.y = groundY + halfHeight
+      character.position.y = groundY + this.terrainYOffset
       this.grounded = true
     } else {
       this.grounded = true

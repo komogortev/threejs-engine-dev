@@ -71,6 +71,22 @@ describe('PlayerController', () => {
     expect(ctrl.getSnapshot().jumpBuffered).toBe(false)
   })
 
+  it('applies setTerrainYOffset when snapping to terrain', () => {
+    const camera = setupCameraAtOriginLookingDownMinusZ()
+    const character = new THREE.Group()
+    character.position.set(1, 0, 2)
+
+    const ctrl = new PlayerController({ characterSpeed: 1 })
+    ctrl.setTerrainYOffset(0)
+    const sampler = { sample: (x: number, z: number) => x * 0 + z * 0 + 3 }
+    ctrl.tick(0.1, { camera, character, sampler, playableRadius: 50 })
+    expect(character.position.y).toBeCloseTo(3)
+
+    ctrl.setTerrainYOffset(0.85)
+    ctrl.tick(0.1, { camera, character, sampler, playableRadius: 50 })
+    expect(character.position.y).toBeCloseTo(3.85)
+  })
+
   it('clamps position to playable disc edge', () => {
     const camera = setupCameraAtOriginLookingDownMinusZ()
     const character = new THREE.Mesh()
