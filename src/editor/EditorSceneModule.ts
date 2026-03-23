@@ -98,10 +98,11 @@ export class EditorSceneModule extends BaseModule {
 
   // ── Cleanup refs ────────────────────────────────────────────────────────────
 
-  private _offPointerDown!: (e: PointerEvent) => void
-  private _offPointerMove!: (e: PointerEvent) => void
-  private _offKeyDown!:     (e: KeyboardEvent) => void
-  private _unregisterLoop:  (() => void) | null = null
+  private _offPointerDown!:   (e: PointerEvent) => void
+  private _offPointerMove!:   (e: PointerEvent) => void
+  private _offKeyDown!:       (e: KeyboardEvent) => void
+  private _offContextMenu!:   (e: MouseEvent) => void
+  private _unregisterLoop:    (() => void) | null = null
 
   // ── Vue bridge callback ─────────────────────────────────────────────────────
 
@@ -181,13 +182,16 @@ export class EditorSceneModule extends BaseModule {
     // ── Canvas pointer / keyboard listeners ──────────────────────────────────
     const canvas = ctx.renderer.domElement
 
-    this._offPointerDown = (e) => this._handlePointerDown(e)
-    this._offPointerMove = (e) => this._handlePointerMove(e)
-    this._offKeyDown     = (e) => this._handleKeyDown(e)
+    this._offPointerDown  = (e) => this._handlePointerDown(e)
+    this._offPointerMove  = (e) => this._handlePointerMove(e)
+    this._offKeyDown      = (e) => this._handleKeyDown(e)
+    // Suppress browser context menu so right-click is free for anchor-setting
+    this._offContextMenu  = (e) => e.preventDefault()
 
-    canvas.addEventListener('pointerdown', this._offPointerDown)
-    canvas.addEventListener('pointermove', this._offPointerMove)
-    window.addEventListener('keydown',     this._offKeyDown)
+    canvas.addEventListener('pointerdown',  this._offPointerDown)
+    canvas.addEventListener('pointermove',  this._offPointerMove)
+    canvas.addEventListener('contextmenu',  this._offContextMenu)
+    window.addEventListener('keydown',      this._offKeyDown)
 
     // ── Frame loop ───────────────────────────────────────────────────────────
     this._unregisterLoop = ctx.registerSystem('editor-orbit', () => {
@@ -199,9 +203,10 @@ export class EditorSceneModule extends BaseModule {
 
   protected async onUnmount(): Promise<void> {
     const canvas = this._ctx.renderer.domElement
-    canvas.removeEventListener('pointerdown', this._offPointerDown)
-    canvas.removeEventListener('pointermove', this._offPointerMove)
-    window.removeEventListener('keydown',     this._offKeyDown)
+    canvas.removeEventListener('pointerdown',  this._offPointerDown)
+    canvas.removeEventListener('pointermove',  this._offPointerMove)
+    canvas.removeEventListener('contextmenu',  this._offContextMenu)
+    window.removeEventListener('keydown',      this._offKeyDown)
     this.orbit.dispose()
     this.transform.dispose()
     this._unregisterLoop?.()
@@ -274,7 +279,22 @@ export class EditorSceneModule extends BaseModule {
   // ─── Pointer handlers ─────────────────────────────────────────────────────────
 
   private _handlePointerDown(e: PointerEvent): void {
-    // Ignore right-click and middle-click (used by OrbitControls)
+    // ── Right-click: set orbit anchor on the terrain surface ──────────────────
+    // Right-clicking anywhere on the terrain moves the OrbitControls target to
+    // that world point. The camera then orbits/zooms around that new pivot,
+    // making it easy to focus on any part of the scene — especially edges.
+    if (e.button === 2) {
+      this._updateMouse(e, this._ctx.renderer)
+      this.raycaster.setFromCamera(this.mouse, this._ctx.camera)
+      const hits = this.raycaster.intersectObject(this.terrainMesh)
+      if (hits.length > 0) {
+        const pt = hits[0].point
+        this.orbit.target.set(pt.x, pt.y, pt.z)
+      }
+      return
+    }
+
+    // Ignore middle-click (used by OrbitControls for pan)
     if (e.button !== 0) return
 
     const ctx = this._ctx

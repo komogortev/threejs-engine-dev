@@ -256,7 +256,7 @@ onUnmounted(async () => {
 
     <!-- ── Hints overlay ─────────────────────────────────────────────────────── -->
     <div class="absolute bottom-4 left-4 space-y-1 pointer-events-none">
-      <p class="hint">Orbit: left-drag · Pan: right-drag · Zoom: scroll</p>
+      <p class="hint">Orbit: left-drag · Zoom: scroll · Right-click terrain: set orbit anchor</p>
       <p class="hint">T = move · R = rotate · S = scale · Esc = deselect · Del = delete</p>
     </div>
   </div>
