@@ -77,9 +77,11 @@ export function serializeDescriptor(
 
   const merged: SceneDescriptor = { ...base, objects: allObjects.length > 0 ? allObjects : undefined }
 
+  // Must match imports in SceneView / EditorView (`scene01` from @/scenes/scene-01).
+  // If you paste into another file (e.g. scene-02.ts), rename the symbol to match.
   return [
     `import type { SceneDescriptor } from '@/scene/SceneDescriptor'\n`,
-    `export const scene: SceneDescriptor = ${tsLiteral(merged, 0)}`,
+    `export const scene01: SceneDescriptor = ${tsLiteral(merged, 0)}`,
   ].join('\n')
 }
 

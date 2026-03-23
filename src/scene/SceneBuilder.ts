@@ -336,7 +336,12 @@ export class SceneBuilder {
     seaLevel: number,
   ): Promise<void> {
     const terrainY = sampler.sample(obj.x, obj.z)
-    if (terrainY < seaLevel) return
+    if (terrainY < seaLevel) {
+      console.warn(
+        `[SceneBuilder] GLTF skipped (terrain below seaLevel=${seaLevel}) at x=${obj.x} z=${obj.z} → y=${terrainY.toFixed(2)} — move the object or raise seaLevel.`,
+      )
+      return
+    }
 
     const scale = obj.scale ?? 1
 
@@ -347,15 +352,16 @@ export class SceneBuilder {
       model.rotation.y  = obj.rotationY ?? 0
       model.position.set(obj.x, terrainY, obj.z)
       ctx.scene.add(model)
-    } catch {
-      // Error placeholder: red wireframe box so mismatched URLs are obvious
+    } catch (err) {
+      // Typical causes: 404 (missing scene.bin / textures next to a .gltf), wrong path
+      // (use `/models/foo.glb` from /public), or terrain sample below seaLevel (skipped above).
+      console.warn(`[SceneBuilder] GLTF load failed: ${obj.url}`, err)
       const box = new THREE.Mesh(
         new THREE.BoxGeometry(1, 2, 1),
         new THREE.MeshStandardMaterial({ color: 0xff2222, wireframe: true }),
       )
       box.position.set(obj.x, terrainY + 1, obj.z)
       ctx.scene.add(box)
-      console.warn(`[SceneBuilder] GLTF load failed: ${obj.url}`)
     }
   }
 
