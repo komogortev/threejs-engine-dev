@@ -13,55 +13,47 @@ const container = ref<HTMLElement>()
 
 // ─── Scene authoring ─────────────────────────────────────────────────────────
 //
-// This is the entire scene definition. Swap values, add features, change
-// atmosphere — the engine rebuilds on next mount.
+// The terrain is driven entirely by the painted heightmap.
+// Mid-grey (128) = sea level baseline.
+// White  = +amplitude (hills/ridges).
+// Black  = −amplitude (depressions, lake floors).
+//
+// Additional procedural features can stack on top if needed.
 //
 const descriptor: SceneDescriptor = {
   terrain: {
-    radius: 50,
-    resolution: 160,
-    seaLevel: 0,
-    baseColor: 0x1c2e1a,       // dark forest green
-    waterColor: 0x0a1e3a,
-    waterOpacity: 0.74,
+    radius:      50,
+    resolution:  180,      // higher res = sharper detail from the image
+    seaLevel:    0,
+    baseColor:   0x1c2e1a,
+    waterColor:  0x0a1c38,
+    waterOpacity: 0.76,
     features: [
-      // Two hills — upper area
-      { type: 'hill', x: 18,  z: -14, radius: 14, height: 7   },
-      { type: 'hill', x: -10, z:  20, radius: 9,  height: 3.5 },
-      // Lake — lower-left quarter
-      { type: 'lake', x: -16, z: -10, radius: 11, depth: 2.2  },
-      // River flowing from upper slope, across flat ground, into the lake
-      // First two points are 2D → auto Y = terrain − 1.0 (surface river)
-      // Last two points are 3D → explicit descending floor into the lake basin
       {
-        type: 'river',
-        path: [
-          [12, -5],              // 2D: high ground near hill base
-          [4,   2],              // 2D: mid-flat terrain
-          [-6, -0.4, -3],        // 3D: begins descending toward lake
-          [-12, -1.6, -8],       // 3D: enters lake basin at -1.6 world Y
-        ],
-        width: 3.5,
-        depth: 1.0,
+        type:      'heightmap',
+        url:       '/terrains/heatmap-scene-1.png',
+        amplitude: 10,       // white pixel = +10 world units, black = -10
+        // worldWidth/worldDepth default to terrain diameter (100 units)
+        // offsetX/offsetZ default to 0 (image centred on world origin)
       },
     ],
   },
 
   atmosphere: {
-    fogColor:         0x080d08,
+    fogColor:         0x06100a,
     fogDensity:       0.013,
     ambientColor:     0x1e3320,
-    ambientIntensity: 0.85,
+    ambientIntensity: 0.8,
     lights: [
-      // Key: warm golden sun from front-right
+      // Key: warm afternoon sun, front-right
       { type: 'directional', color: 0xfff0cc, intensity: 1.3, position: [6, 14, 7]    },
-      // Rim: cool blue from behind-left (separates character from background)
-      { type: 'directional', color: 0x1a3a7a, intensity: 0.7, position: [-8, 4, -10] },
+      // Rim: cool deep-blue from behind-left
+      { type: 'directional', color: 0x0a1e5a, intensity: 0.8, position: [-8, 4, -10] },
     ],
   },
 
   character: {
-    startPosition: [0, 0],   // centre of scene, Y auto-snapped to terrain
+    startPosition: [0, 0],   // world centre — Y auto-snapped to terrain
   },
 }
 

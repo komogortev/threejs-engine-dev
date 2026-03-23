@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type { TerrainFeature, HillFeature, LakeFeature, RiverFeature, PathPoint } from './SceneDescriptor'
+import { type HeightmapData, sampleHeightmap } from './HeightmapLoader'
 
 interface RiverCache {
   /** 200 evenly-spaced points pre-sampled from the CatmullRom curve. */
@@ -40,8 +41,17 @@ export class TerrainSampler {
   private readonly hills: HillFeature[] = []
   private readonly lakes: LakeFeature[] = []
   private readonly rivers: RiverCache[] = []
+  private readonly heightmaps: HeightmapData[] = []
 
-  constructor(features: TerrainFeature[] = []) {
+  /**
+   * @param features    TerrainFeature array from the descriptor (HeightmapFeature
+   *                    entries are ignored here — pass pre-loaded data instead).
+   * @param heightmaps  Pre-loaded HeightmapData objects from HeightmapLoader.
+   *                    SceneBuilder resolves these before constructing the sampler.
+   */
+  constructor(features: TerrainFeature[] = [], heightmaps: HeightmapData[] = []) {
+    this.heightmaps = heightmaps
+
     // Pass 1 — collect non-river features first (rivers depend on them)
     for (const f of features) {
       if (f.type === 'hill') this.hills.push(f)
@@ -69,8 +79,9 @@ export class TerrainSampler {
 
   private sampleBase(x: number, z: number): number {
     let y = 0
-    for (const h of this.hills) y += this.sampleHill(h, x, z)
-    for (const l of this.lakes) y += this.sampleLake(l, x, z)
+    for (const hm of this.heightmaps) y += sampleHeightmap(hm, x, z)
+    for (const h  of this.hills)      y += this.sampleHill(h, x, z)
+    for (const l  of this.lakes)      y += this.sampleLake(l, x, z)
     return y
   }
 

@@ -113,7 +113,7 @@ export class ThirdPersonSceneModule extends BaseModule {
     const ctx = context as ThreeContext
 
     if (this.descriptor) {
-      const result = SceneBuilder.build(ctx, this.descriptor)
+      const result = await SceneBuilder.build(ctx, this.descriptor)
       this.character       = result.character
       this.sampler         = result.sampler
       this.effectiveRadius = result.effectiveRadius

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { ThreeContext } from '@base/threejs-engine'
 import type { SceneDescriptor, LightDescriptor, TerrainDescriptor } from './SceneDescriptor'
 import { TerrainSampler } from './TerrainSampler'
+import { type HeightmapData, loadHeightmap } from './HeightmapLoader'
 
 /** Pivot-centre-to-ground distance for the default CapsuleGeometry(0.35, 1.0). */
 const CHARACTER_HALF_HEIGHT = 0.85
@@ -27,13 +28,16 @@ export interface SceneBuilderResult {
  *   6. Character capsule (positioned at terrain surface at startPosition)
  */
 export class SceneBuilder {
-  static build(ctx: ThreeContext, descriptor: SceneDescriptor): SceneBuilderResult {
-    const terrain = descriptor.terrain   ?? {}
-    const atmo    = descriptor.atmosphere ?? {}
-    const charDesc = descriptor.character ?? {}
+  static async build(ctx: ThreeContext, descriptor: SceneDescriptor): Promise<SceneBuilderResult> {
+    const terrain  = descriptor.terrain    ?? {}
+    const atmo     = descriptor.atmosphere ?? {}
+    const charDesc = descriptor.character  ?? {}
 
     const radius   = terrain.radius   ?? 50
     const seaLevel = terrain.seaLevel ?? 0
+
+    // ── Pre-load all heightmap images before anything else ───────────────────
+    const heightmapData = await SceneBuilder.loadHeightmaps(terrain, radius)
 
     // ── Atmosphere ────────────────────────────────────────────────────────────
     const fogColor = atmo.fogColor ?? 0x080810
@@ -58,14 +62,14 @@ export class SceneBuilder {
     }
 
     // ── Terrain ───────────────────────────────────────────────────────────────
-    const sampler = new TerrainSampler(terrain.features ?? [])
+    const sampler = new TerrainSampler(terrain.features ?? [], heightmapData)
     ctx.scene.add(SceneBuilder.buildTerrain(sampler, terrain))
 
     // ── Water ─────────────────────────────────────────────────────────────────
     // Add water plane whenever features can produce sub-seaLevel terrain.
-    const hasSubmergedFeatures = (terrain.features ?? []).some(
-      (f) => f.type === 'lake' || f.type === 'river',
-    )
+    const hasSubmergedFeatures =
+      heightmapData.length > 0 ||
+      (terrain.features ?? []).some((f) => f.type === 'lake' || f.type === 'river')
     if (hasSubmergedFeatures) {
       ctx.scene.add(
         SceneBuilder.buildWater(
@@ -189,6 +193,24 @@ export class SceneBuilder {
       metalness: 0.2,
     })
     return new THREE.Mesh(geo, mat)
+  }
+
+  // ─── Lights ───────────────────────────────────────────────────────────────────
+
+  // ─── Heightmap pre-loading ────────────────────────────────────────────────────
+
+  private static async loadHeightmaps(
+    terrain: TerrainDescriptor,
+    radius: number,
+  ): Promise<HeightmapData[]> {
+    const features = terrain.features ?? []
+    const diameter = radius * 2
+
+    const loads = features
+      .filter((f) => f.type === 'heightmap')
+      .map((f) => loadHeightmap(f as import('./SceneDescriptor').HeightmapFeature, diameter))
+
+    return Promise.all(loads)
   }
 
   // ─── Lights ───────────────────────────────────────────────────────────────────

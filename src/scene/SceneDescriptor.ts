@@ -79,7 +79,40 @@ export interface RiverFeature {
   depth: number
 }
 
-export type TerrainFeature = HillFeature | LakeFeature | RiverFeature
+/**
+ * Grayscale image-driven heightmap.
+ *
+ * Pixel encoding:
+ *   White  (255) → +amplitude  world units above baseline
+ *   Mid-grey (128) → 0          (no displacement)
+ *   Black  (0)   → −amplitude  world units below baseline (depression / ocean floor)
+ *
+ * Image orientation:
+ *   Image top    → world −Z (north)
+ *   Image left   → world −X (west)
+ *   Image bottom → world +Z (south)
+ *   Image right  → world +X (east)
+ *
+ * Sampling is bilinear — smooth slopes regardless of image resolution.
+ * Composes additively with all other features.
+ */
+export interface HeightmapFeature {
+  type: 'heightmap'
+  /** Path relative to /public, e.g. '/terrains/valley.png' */
+  url: string
+  /** World units corresponding to a fully white or fully black pixel. */
+  amplitude: number
+  /** World-space width the image covers. Defaults to terrain diameter (radius×2). */
+  worldWidth?: number
+  /** World-space depth the image covers. Defaults to terrain diameter (radius×2). */
+  worldDepth?: number
+  /** World X of the image centre. Defaults to 0. */
+  offsetX?: number
+  /** World Z of the image centre. Defaults to 0. */
+  offsetZ?: number
+}
+
+export type TerrainFeature = HillFeature | LakeFeature | RiverFeature | HeightmapFeature
 
 // ─── Terrain ─────────────────────────────────────────────────────────────────
 
