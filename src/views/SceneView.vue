@@ -75,7 +75,7 @@ onUnmounted(async () => {
             <kbd class="key">A</kbd><kbd class="key">S</kbd><kbd class="key">D</kbd>
           </div>
         </div>
-        <p class="text-white/30 text-[11px] tracking-widest uppercase">move</p>
+        <p class="text-white/30 text-[11px] tracking-widest uppercase">move · Space jump (buffer)</p>
       </div>
     </Transition>
   </div>

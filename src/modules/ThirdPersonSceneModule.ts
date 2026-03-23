@@ -2,14 +2,12 @@ import * as THREE from 'three'
 import { BaseModule } from '@base/engine-core'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
-import type { InputAxisEvent } from '@base/input'
+import type { InputActionEvent, InputAxisEvent } from '@base/input'
+import { PlayerController, PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
 import { SceneBuilder } from '@/scene/SceneBuilder'
 import { EnvironmentRuntime } from '@/scene/EnvironmentRuntime'
-import { TerrainSampler } from '@/scene/TerrainSampler'
 import type { SceneDescriptor } from '@/scene/SceneDescriptor'
-
-// Tied to CapsuleGeometry(0.35, 1.0): total height 1.7, pivot at centre.
-const CHARACTER_HALF_HEIGHT = 0.85
+import type { TerrainSampler } from '@/scene/TerrainSampler'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -38,20 +36,14 @@ const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
   facingLerp: 12,
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function lerpAngle(current: number, target: number, t: number): number {
-  let diff = target - current
-  while (diff >  Math.PI) diff -= 2 * Math.PI
-  while (diff < -Math.PI) diff += 2 * Math.PI
-  return current + diff * Math.min(1, t)
-}
-
 // ─── Module ──────────────────────────────────────────────────────────────────
 
 /**
  * ThirdPersonSceneModule — third-person character controller with an optional
  * terrain descriptor for shaped environments.
+ *
+ * Locomotion state and rules live in {@link PlayerController}; this module wires
+ * input, terrain snap, environment, and the follow camera rig.
  *
  * ## Basic usage (flat default scene)
  * ```ts
@@ -84,29 +76,35 @@ export class ThirdPersonSceneModule extends BaseModule {
   protected readonly cfg: ThirdPersonSceneConfig
   private readonly descriptor?: SceneDescriptor
 
+  private readonly player: PlayerController
+
   private character!: THREE.Mesh
   private sampler?: TerrainSampler
   private effectiveRadius = 50
 
-  private characterFacing = 0
-  private readonly moveInput = { x: 0, y: 0 }
-
-  private offInput: (() => void) | null = null
+  private offInputAxis: (() => void) | null = null
+  private offInputAction: (() => void) | null = null
   private unregisterSystem: (() => void) | null = null
   private environment: EnvironmentRuntime | null = null
 
-  // Reused each frame — no per-frame allocation
-  private readonly _camDir    = new THREE.Vector3()
-  private readonly _camRight  = new THREE.Vector3()
-  private readonly _moveDir   = new THREE.Vector3()
   private readonly _camTarget = new THREE.Vector3()
-  private readonly _lookAt    = new THREE.Vector3()
+  private readonly _lookAt = new THREE.Vector3()
 
   constructor(options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {}) {
     super()
     const { descriptor, ...configOverrides } = options
     this.cfg        = { ...DEFAULT_CONFIG, ...configOverrides }
     this.descriptor = descriptor
+    this.player     = new PlayerController({
+      characterSpeed: this.cfg.characterSpeed,
+      facingLerp: this.cfg.facingLerp,
+      halfHeight: PLAYER_CAPSULE_HALF_HEIGHT,
+    })
+  }
+
+  /** Exposed for editor HUD / future game modules that read locomotion state. */
+  getPlayerController(): PlayerController {
+    return this.player
   }
 
   // ─── Mount ──────────────────────────────────────────────────────────────────
@@ -125,13 +123,21 @@ export class ThirdPersonSceneModule extends BaseModule {
       this.character = this.buildDefaultScene(ctx)
     }
 
+    this.player.resetFacing(this.character.rotation.y)
+
     this.initCamera(ctx.camera)
 
-    this.offInput = context.eventBus.on('input:axis', (raw) => {
+    this.offInputAxis = context.eventBus.on('input:axis', (raw) => {
       const e = raw as InputAxisEvent
       if (e.axis === 'move') {
-        this.moveInput.x = e.value.x
-        this.moveInput.y = e.value.y
+        this.player.setMoveIntent(e.value.x, e.value.y)
+      }
+    })
+
+    this.offInputAction = context.eventBus.on('input:action', (raw) => {
+      const e = raw as InputActionEvent
+      if (e.action === 'jump' && e.type === 'pressed') {
+        this.player.notifyJumpPressed()
       }
     })
 
@@ -143,7 +149,8 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   protected async onUnmount(): Promise<void> {
     this.unregisterSystem?.()
-    this.offInput?.()
+    this.offInputAxis?.()
+    this.offInputAction?.()
 
     this.environment?.dispose()
     this.environment = null
@@ -190,7 +197,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       new THREE.CapsuleGeometry(0.35, 1.0, 8, 16),
       new THREE.MeshStandardMaterial({ color: 0x6366f1, roughness: 0.5, metalness: 0.2 }),
     )
-    character.position.set(0, CHARACTER_HALF_HEIGHT, 0)
+    character.position.set(0, PLAYER_CAPSULE_HALF_HEIGHT, 0)
     ctx.scene.add(character)
 
     return character
@@ -211,70 +218,23 @@ export class ThirdPersonSceneModule extends BaseModule {
   // ─── Per-frame update ─────────────────────────────────────────────────────────
 
   private tick(delta: number, ctx: ThreeContext): void {
-    this.updateMovement(delta, ctx.camera)
-    this.snapToTerrain()
+    this.player.tick(delta, {
+      camera: ctx.camera,
+      character: this.character,
+      sampler: this.sampler,
+      playableRadius: this.effectiveRadius,
+    })
     this.updateCamera(delta, ctx.camera)
-  }
-
-  private updateMovement(delta: number, camera: THREE.PerspectiveCamera): void {
-    const { x, y } = this.moveInput
-    if (Math.abs(x) < 0.01 && Math.abs(y) < 0.01) return
-
-    // Camera-relative horizontal movement
-    camera.getWorldDirection(this._camDir)
-    this._camDir.y = 0
-    this._camDir.normalize()
-
-    this._camRight.crossVectors(this._camDir, THREE.Object3D.DEFAULT_UP).normalize()
-
-    this._moveDir
-      .copy(this._camDir).multiplyScalar(y)
-      .addScaledVector(this._camRight, x)
-      .normalize()
-
-    const speed = this.cfg.characterSpeed
-    this.character.position.x += this._moveDir.x * speed * delta
-    this.character.position.z += this._moveDir.z * speed * delta
-
-    // Clamp to playable disc
-    const limit  = this.effectiveRadius - 1.5
-    const distSq = this.character.position.x ** 2 + this.character.position.z ** 2
-    if (distSq > limit * limit) {
-      const d = Math.sqrt(distSq)
-      this.character.position.x *= limit / d
-      this.character.position.z *= limit / d
-    }
-
-    // Rotate to face movement direction
-    // Three.js rotation.y=0 faces -Z. Target: atan2(-dx, -dz).
-    const targetFacing = Math.atan2(-this._moveDir.x, -this._moveDir.z)
-    this.characterFacing = lerpAngle(this.characterFacing, targetFacing, this.cfg.facingLerp * delta)
-    this.character.rotation.y = this.characterFacing
-  }
-
-  /**
-   * Snap character Y to terrain surface every frame.
-   * No-op when no descriptor is provided (flat ground, character stays at y=0.85).
-   */
-  private snapToTerrain(): void {
-    if (!this.sampler) return
-    const groundY = this.sampler.sample(
-      this.character.position.x,
-      this.character.position.z,
-    )
-    this.character.position.y = groundY + CHARACTER_HALF_HEIGHT
   }
 
   private updateCamera(delta: number, camera: THREE.PerspectiveCamera): void {
     const { cameraDistance, cameraHeight, cameraLerp } = this.cfg
+    const facing = this.player.getFacing()
 
-    // Spring-arm: stay behind character's current facing direction
-    // Character's -Z in world space when facing=f is (-sin(f), 0, -cos(f)).
-    // Behind = (sin(f), 0, cos(f)) × distance.
     this._camTarget.set(
-      this.character.position.x + Math.sin(this.characterFacing) * cameraDistance,
+      this.character.position.x + Math.sin(facing) * cameraDistance,
       this.character.position.y + cameraHeight,
-      this.character.position.z + Math.cos(this.characterFacing) * cameraDistance,
+      this.character.position.z + Math.cos(facing) * cameraDistance,
     )
 
     camera.position.lerp(this._camTarget, cameraLerp * delta)

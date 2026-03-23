@@ -14,9 +14,7 @@ import { TerrainSampler } from './TerrainSampler'
 import { type HeightmapData, loadHeightmap } from './HeightmapLoader'
 import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from './PrimitiveFactory'
 import { createSeeder } from './Seeder'
-
-/** Pivot-centre-to-ground distance for the default CapsuleGeometry(0.35, 1.0). */
-const CHARACTER_HALF_HEIGHT = 0.85
+import { PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
 
 export interface SceneBuilderResult {
   sampler: TerrainSampler
@@ -110,7 +108,7 @@ export class SceneBuilder {
     const [startX, startZ] = charDesc.startPosition ?? [0, 0]
     const groundY = sampler.sample(startX, startZ)
     const character = SceneBuilder.buildCharacter()
-    character.position.set(startX, groundY + CHARACTER_HALF_HEIGHT, startZ)
+    character.position.set(startX, groundY + PLAYER_CAPSULE_HALF_HEIGHT, startZ)
     ctx.scene.add(character)
 
     // ── Objects ───────────────────────────────────────────────────────────────
