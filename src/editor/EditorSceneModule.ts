@@ -24,11 +24,15 @@ export type GizmoMode  = 'translate' | 'rotate' | 'scale'
 export type EditorObject = PlacedObject | GltfObject
 
 export interface EditorState {
-  objects:       EditorObject[]
-  selectedIndex: number | null
-  activeTool:    EditorTool
-  gizmoMode:     GizmoMode
-  activeGltfUrl: string
+  objects:              EditorObject[]
+  selectedIndex:        number | null
+  activeTool:           EditorTool
+  gizmoMode:            GizmoMode
+  activeGltfUrl:        string
+  /** Live copies of seeded scatter zones (editable in the sidebar). */
+  scatterFields:        ScatterField[]
+  /** Which scatter zone is selected for property editing (null = none). */
+  selectedScatterIndex: number | null
 }
 
 // ─── Colours for scatter zone rings ──────────────────────────────────────────
@@ -154,6 +158,15 @@ export class EditorSceneModule extends BaseModule {
   private _nodeToDesc  = new Map<THREE.Object3D, EditorObject>()
   private _descToNode  = new Map<EditorObject,   THREE.Object3D>()
 
+  // ── Scatter (seeded spawners) ───────────────────────────────────────────────
+
+  private _scatterFields: ScatterField[] = []
+  private _scatterRoot!: THREE.Group
+  private _terrainRadius = 50
+  private _seaLevel      = 0
+  private _selectedScatterIndex: number | null = null
+  private _scatterRebuildTimer: ReturnType<typeof setTimeout> | null = null
+
   // ── Scatter ring visuals ─────────────────────────────────────────────────────
 
   private _scatterRings: THREE.Object3D[] = []
@@ -201,9 +214,17 @@ export class EditorSceneModule extends BaseModule {
     const result      = await SceneBuilder.build(ctx, buildDesc)
     this.terrainMesh  = result.terrainMesh
     this._sampler     = result.sampler
+    this._scatterRoot = result.scatterRoot
+
+    const terrain = this.descriptor.terrain ?? {}
+    this._terrainRadius = terrain.radius   ?? 50
+    this._seaLevel      = terrain.seaLevel ?? 0
+
+    // Editable copies of scatter descriptors (rings + meshes follow these)
+    this._scatterFields = scatterItems.map((f) => ({ ...f }))
 
     // ── Scatter zone rings ────────────────────────────────────────────────────
-    this._buildScatterRings(scatterItems)
+    this._buildScatterRings(this._scatterFields)
 
     // ── Register existing explicit objects as interactive ─────────────────────
     for (const item of placedItems) {
@@ -255,6 +276,10 @@ export class EditorSceneModule extends BaseModule {
   }
 
   protected async onUnmount(): Promise<void> {
+    if (this._scatterRebuildTimer !== null) {
+      clearTimeout(this._scatterRebuildTimer)
+      this._scatterRebuildTimer = null
+    }
     const canvas = this._ctx.renderer.domElement
     canvas.removeEventListener('pointerdown',  this._offPointerDown)
     canvas.removeEventListener('pointermove',  this._offPointerMove)
@@ -275,6 +300,7 @@ export class EditorSceneModule extends BaseModule {
 
   setActiveTool(tool: EditorTool): void {
     this._activeTool = tool
+    this._selectedScatterIndex = null
     this._deselect()
     this._removeGhost()
     if (tool !== 'select') this._createGhost(tool)
@@ -300,6 +326,105 @@ export class EditorSceneModule extends BaseModule {
   selectByIndex(index: number): void {
     if (index < 0 || index >= this._objects.length) return
     this._selectIndex(index)
+  }
+
+  // ─── Seeded scatter (spawner) controls ───────────────────────────────────────
+
+  /** Shallow copies of current scatter field descriptors (for export / display). */
+  getScatterFields(): ScatterField[] {
+    return this._scatterFields.map((f) => ({ ...f }))
+  }
+
+  /**
+   * Select a scatter zone for editing in the sidebar. Clears placed-object selection.
+   * Pass `null` to clear.
+   */
+  selectScatterIndex(index: number | null): void {
+    if (index !== null && (index < 0 || index >= this._scatterFields.length)) return
+    this._selectedScatterIndex = index
+    this._deselect()
+    this._emitState()
+  }
+
+  /**
+   * Patch one scatter field and rebuild procedural instances + ring overlays.
+   * Values are clamped to keep the layout stable (radii, scales, count).
+   */
+  updateScatterField(index: number, patch: Partial<ScatterField>): void {
+    if (index < 0 || index >= this._scatterFields.length) return
+    const cur = this._scatterFields[index]
+    if (!cur) return
+
+    const next: ScatterField = { ...cur, ...patch, type: 'scatter' }
+
+    if (patch.count !== undefined) {
+      next.count = Math.max(0, Math.floor(Number(patch.count)))
+    }
+    if (patch.seed !== undefined) {
+      next.seed = Math.floor(Number(patch.seed)) >>> 0
+    }
+    if (patch.outerRadius !== undefined) {
+      next.outerRadius = Math.max(0.5, patch.outerRadius)
+    }
+    if (patch.innerRadius !== undefined) {
+      next.innerRadius = Math.max(0, patch.innerRadius)
+    }
+
+    const outer = next.outerRadius
+    let inner   = next.innerRadius ?? 0
+    if (inner >= outer) {
+      inner = Math.max(0, outer - 0.5)
+      next.innerRadius = inner
+    }
+
+    let smin = next.scaleMin ?? 0.75
+    let smax = next.scaleMax ?? 1.25
+    smin = Math.max(0.05, smin)
+    smax = Math.max(smin, smax)
+    next.scaleMin = smin
+    next.scaleMax = smax
+
+    this._scatterFields[index] = next
+    this._scheduleScatterRebuild()
+    this._emitState()
+  }
+
+  /** Assign a new random seed to scatter zone `index` (32-bit unsigned). */
+  randomizeScatterSeed(index: number): void {
+    const s = (Math.random() * 0xffffffff) >>> 0
+    this.updateScatterField(index, { seed: s })
+  }
+
+  /** Append a new scatter zone with conservative defaults. */
+  addScatterField(): void {
+    this._scatterFields.push({
+      type:        'scatter',
+      primitive:   'rock',
+      count:       12,
+      centerX:     0,
+      centerZ:     0,
+      innerRadius: 0,
+      outerRadius: 12,
+      scaleMin:    0.75,
+      scaleMax:    1.25,
+      seed:        (Math.random() * 0xffffffff) >>> 0,
+    })
+    this._selectedScatterIndex = this._scatterFields.length - 1
+    this._deselect()
+    this._scheduleScatterRebuild()
+    this._emitState()
+  }
+
+  /** Remove scatter zone `index`. */
+  removeScatterField(index: number): void {
+    if (index < 0 || index >= this._scatterFields.length) return
+    this._scatterFields.splice(index, 1)
+    if (this._selectedScatterIndex === index) this._selectedScatterIndex = null
+    else if (this._selectedScatterIndex !== null && this._selectedScatterIndex > index) {
+      this._selectedScatterIndex--
+    }
+    this._scheduleScatterRebuild()
+    this._emitState()
   }
 
   deleteSelected(): void {
@@ -516,6 +641,7 @@ export class EditorSceneModule extends BaseModule {
   // ─── Selection ───────────────────────────────────────────────────────────────
 
   private _selectIndex(idx: number): void {
+    this._selectedScatterIndex = null
     this._selectedIndex = idx
     const node = this._placedNodes[idx]
     if (node) this.transform.attach(node)
@@ -572,6 +698,37 @@ export class EditorSceneModule extends BaseModule {
    * Draws outer + inner terrain-hugging circle lines for every scatter field.
    * Colour-coded by primitive type so overlapping zones are distinguishable.
    */
+  private _clearScatterRings(): void {
+    for (const r of this._scatterRings) {
+      this._ctx.scene.remove(r)
+      if (r instanceof THREE.Line || r instanceof THREE.LineSegments) {
+        r.geometry.dispose()
+        const m = r.material
+        if (m && typeof (m as THREE.Material).dispose === 'function') {
+          ;(m as THREE.Material).dispose()
+        }
+      }
+    }
+    this._scatterRings = []
+  }
+
+  /** Debounced rebuild of scatter meshes + ring helpers after descriptor edits. */
+  private _scheduleScatterRebuild(): void {
+    if (this._scatterRebuildTimer !== null) clearTimeout(this._scatterRebuildTimer)
+    this._scatterRebuildTimer = setTimeout(() => {
+      this._scatterRebuildTimer = null
+      SceneBuilder.rebuildScatter(
+        this._scatterRoot,
+        this._scatterFields,
+        this._sampler,
+        this._terrainRadius,
+        this._seaLevel,
+      )
+      this._clearScatterRings()
+      this._buildScatterRings(this._scatterFields)
+    }, 120)
+  }
+
   private _buildScatterRings(scatterFields: ScatterField[]): void {
     for (const field of scatterFields) {
       const cx    = field.centerX    ?? 0
@@ -659,11 +816,13 @@ export class EditorSceneModule extends BaseModule {
 
   private _emitState(): void {
     this.onStateChanged?.({
-      objects:       [...this._objects],
-      selectedIndex: this._selectedIndex,
-      activeTool:    this._activeTool,
-      gizmoMode:     this._gizmoMode,
-      activeGltfUrl: this._activeGltfUrl,
+      objects:              [...this._objects],
+      selectedIndex:        this._selectedIndex,
+      activeTool:           this._activeTool,
+      gizmoMode:            this._gizmoMode,
+      activeGltfUrl:        this._activeGltfUrl,
+      scatterFields:        this._scatterFields.map((f) => ({ ...f })),
+      selectedScatterIndex: this._selectedScatterIndex,
     })
   }
 }

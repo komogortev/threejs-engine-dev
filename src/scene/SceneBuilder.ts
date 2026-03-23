@@ -23,6 +23,8 @@ export interface SceneBuilderResult {
   character: THREE.Mesh
   terrainMesh: THREE.Mesh
   effectiveRadius: number
+  /** All procedural scatter instances live under this group (editor can rebuild in place). */
+  scatterRoot: THREE.Group
 }
 
 /**
@@ -106,9 +108,20 @@ export class SceneBuilder {
     ctx.scene.add(character)
 
     // ── Objects ───────────────────────────────────────────────────────────────
-    await SceneBuilder.placeObjects(ctx, descriptor.objects ?? [], sampler, radius, seaLevel)
+    const scatterRoot = new THREE.Group()
+    scatterRoot.name = 'scene-scatter-root'
+    ctx.scene.add(scatterRoot)
 
-    return { sampler, character, terrainMesh, effectiveRadius: radius }
+    await SceneBuilder.placeObjects(
+      ctx,
+      descriptor.objects ?? [],
+      sampler,
+      radius,
+      seaLevel,
+      scatterRoot,
+    )
+
+    return { sampler, character, terrainMesh, effectiveRadius: radius, scatterRoot }
   }
 
   // ─── Terrain mesh ─────────────────────────────────────────────────────────────
@@ -242,12 +255,13 @@ export class SceneBuilder {
     sampler: TerrainSampler,
     terrainRadius: number,
     seaLevel: number,
+    scatterRoot: THREE.Group,
   ): Promise<void> {
     const gltfTasks: Promise<void>[] = []
 
     for (const obj of objects) {
       if (obj.type === 'scatter') {
-        SceneBuilder.placeScatter(ctx.scene, obj as ScatterField, sampler, terrainRadius, seaLevel)
+        SceneBuilder.placeScatter(scatterRoot, obj as ScatterField, sampler, terrainRadius, seaLevel)
       } else if (obj.type === 'gltf') {
         gltfTasks.push(SceneBuilder.placeGltf(ctx, obj as GltfObject, sampler, seaLevel))
       } else {
@@ -256,6 +270,41 @@ export class SceneBuilder {
     }
 
     await Promise.all(gltfTasks)
+  }
+
+  /**
+   * Removes and re-fills all scatter meshes under `scatterRoot` from the given fields.
+   * Used by the scene editor when seed/count/radii/etc. change.
+   */
+  static rebuildScatter(
+    scatterRoot: THREE.Group,
+    fields: ScatterField[],
+    sampler: TerrainSampler,
+    terrainRadius: number,
+    seaLevel: number,
+  ): void {
+    while (scatterRoot.children.length > 0) {
+      const c = scatterRoot.children[0]!
+      scatterRoot.remove(c)
+      SceneBuilder.disposeObject3D(c)
+    }
+    for (const f of fields) {
+      SceneBuilder.placeScatter(scatterRoot, f, sampler, terrainRadius, seaLevel)
+    }
+  }
+
+  private static disposeObject3D(obj: THREE.Object3D): void {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose()
+        const mats = Array.isArray(child.material) ? child.material : [child.material]
+        for (const m of mats) {
+          if (m && typeof (m as THREE.Material).dispose === 'function') {
+            ;(m as THREE.Material).dispose()
+          }
+        }
+      }
+    })
   }
 
   /** Places a single explicitly-positioned primitive. */
@@ -322,7 +371,7 @@ export class SceneBuilder {
    *   - Scale and rotation are also seeded so each instance is deterministic.
    */
   private static placeScatter(
-    scene: THREE.Scene,
+    parent: THREE.Object3D,
     field: ScatterField,
     sampler: TerrainSampler,
     terrainRadius: number,
@@ -367,7 +416,7 @@ export class SceneBuilder {
       const obj = PrimitiveFactory.build(field.primitive, scale, rng)
       obj.position.set(x, terrainY + offset * scale, z)
       obj.rotation.y = rotY
-      scene.add(obj)
+      parent.add(obj)
       placed++
     }
   }

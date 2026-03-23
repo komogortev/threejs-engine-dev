@@ -1,4 +1,9 @@
-import type { SceneDescriptor, PlacedObject, GltfObject, ScatterField } from '@/scene/SceneDescriptor'
+import type {
+  SceneDescriptor,
+  PlacedObject,
+  GltfObject,
+  ScatterField,
+} from '@/scene/SceneDescriptor'
 
 export type EditorObject = PlacedObject | GltfObject
 
@@ -55,12 +60,20 @@ export async function copyObjectsToClipboard(objects: EditorObject[]): Promise<b
  *
  * Paste the output into a new `src/scenes/<name>.ts` file.
  */
+/**
+ * @param scatterFieldsOverride — When set (e.g. from the editor), used instead of
+ *   scatter entries still present in `base.objects`. Keeps export in sync with
+ *   live seed / count / radius edits.
+ */
 export function serializeDescriptor(
   base: SceneDescriptor,
   editorObjects: EditorObject[],
+  scatterFieldsOverride?: ScatterField[],
 ): string {
-  const scatterFields = (base.objects ?? []).filter((o) => o.type === 'scatter') as ScatterField[]
-  const allObjects    = [...scatterFields, ...editorObjects]
+  const scatterFields =
+    scatterFieldsOverride ??
+    ((base.objects ?? []).filter((o) => o.type === 'scatter') as ScatterField[])
+  const allObjects = [...scatterFields, ...editorObjects]
 
   const merged: SceneDescriptor = { ...base, objects: allObjects.length > 0 ? allObjects : undefined }
 
@@ -74,8 +87,9 @@ export function serializeDescriptor(
 export async function copyDescriptorToClipboard(
   base: SceneDescriptor,
   editorObjects: EditorObject[],
+  scatterFieldsOverride?: ScatterField[],
 ): Promise<boolean> {
-  return writeClipboard(serializeDescriptor(base, editorObjects))
+  return writeClipboard(serializeDescriptor(base, editorObjects, scatterFieldsOverride))
 }
 
 // ─── TypeScript literal serializer ───────────────────────────────────────────

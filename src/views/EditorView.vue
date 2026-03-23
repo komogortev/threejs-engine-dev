@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { useShellContext } from '@/composables/useShellContext'
 import { EditorSceneModule } from '@/editor/EditorSceneModule'
 import type { EditorState, EditorTool, EditorObject, GizmoMode } from '@/editor/EditorSceneModule'
-import type { PrimitiveType, GltfObject } from '@/scene/SceneDescriptor'
+import type { PrimitiveType, GltfObject, ScatterField } from '@/scene/SceneDescriptor'
 import { copyObjectsToClipboard, copyDescriptorToClipboard } from '@/editor/DescriptorExporter'
 import { scene01 } from '@/scenes/scene-01'
 
@@ -21,11 +22,13 @@ const editor = new EditorSceneModule(scene01)
 // ─── Reactive editor state ────────────────────────────────────────────────────
 
 const state = ref<EditorState>({
-  objects:       [],
-  selectedIndex: null,
-  activeTool:    'select',
-  gizmoMode:     'translate',
-  activeGltfUrl: '',
+  objects:               [],
+  selectedIndex:       null,
+  activeTool:          'select',
+  gizmoMode:           'translate',
+  activeGltfUrl:       '',
+  scatterFields:       [],
+  selectedScatterIndex: null,
 })
 
 const selected = computed<EditorObject | null>(() =>
@@ -33,6 +36,13 @@ const selected = computed<EditorObject | null>(() =>
     ? (state.value.objects[state.value.selectedIndex] ?? null)
     : null,
 )
+
+/** Scatter zone currently selected in the sidebar (seed / count / rings). */
+const selectedScatter = computed<ScatterField | null>(() => {
+  const i = state.value.selectedScatterIndex
+  if (i === null) return null
+  return state.value.scatterFields[i] ?? null
+})
 
 // ─── GLTF tool state ──────────────────────────────────────────────────────────
 
@@ -62,7 +72,19 @@ async function copyObjects(): Promise<void> {
 }
 
 async function copyDescriptor(): Promise<void> {
-  flash(copyDescLabel, await copyDescriptorToClipboard(scene01, editor.getObjects()), 'Copy full scene')
+  flash(
+    copyDescLabel,
+    await copyDescriptorToClipboard(scene01, editor.getObjects(), editor.getScatterFields()),
+    'Copy full scene',
+  )
+}
+
+function scatterZoneLabel(sf: ScatterField, idx: number): string {
+  return `#${idx + 1} ${sf.primitive} · ${sf.count}@${sf.seed ?? 0}`
+}
+
+function patchScatter(idx: number, patch: Partial<ScatterField>): void {
+  editor.updateScatterField(idx, patch)
 }
 
 // ─── Tool helpers ─────────────────────────────────────────────────────────────
@@ -114,9 +136,6 @@ onUnmounted(async () => {
   clearTimeout(copyTimeout.value)
   await engine.unmount()
 })
-
-// helper type re-export so template can use it
-type Ref<T> = ReturnType<typeof ref<T>>
 </script>
 
 <template>
@@ -150,7 +169,8 @@ type Ref<T> = ReturnType<typeof ref<T>>
       <div class="flex-1" />
 
       <span class="text-white/30 text-xs font-mono">
-        {{ state.objects.length }} object{{ state.objects.length !== 1 ? 's' : '' }}
+        {{ state.scatterFields.length }} scatter
+        · {{ state.objects.length }} placed
       </span>
     </div>
 
@@ -218,8 +238,168 @@ type Ref<T> = ReturnType<typeof ref<T>>
         </p>
       </div>
 
-      <!-- ── Selected properties ── -->
-      <div v-if="selected" class="px-3 py-2 border-b border-white/10 space-y-2">
+      <!-- ── Seeded spawners (scatter fields) ── -->
+      <div class="px-3 py-2 border-b border-white/10">
+        <div class="flex items-center justify-between mb-1.5">
+          <p class="text-white/30 uppercase tracking-widest text-[10px]">Seeded spawners</p>
+          <button
+            type="button"
+            class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300
+                   hover:bg-emerald-800/60 transition-colors"
+            @click="editor.addScatterField()"
+          >
+            + Zone
+          </button>
+        </div>
+
+        <p v-if="state.scatterFields.length === 0" class="text-white/20 text-[10px] leading-relaxed">
+          No scatter zones. Use <strong class="text-white/40">+ Zone</strong> or load a scene with scatter entries.
+        </p>
+
+        <ul v-else class="space-y-0.5 max-h-28 overflow-y-auto">
+          <li
+            v-for="(sf, idx) in state.scatterFields"
+            :key="idx"
+            :class="[
+              'flex items-center gap-1 px-2 py-1 rounded cursor-pointer transition-colors text-[11px]',
+              state.selectedScatterIndex === idx
+                ? 'bg-emerald-700/35 text-white ring-1 ring-emerald-500/40'
+                : 'hover:bg-white/5 text-white/55 hover:text-white/85',
+            ]"
+            @click="editor.selectScatterIndex(idx)"
+          >
+            <span>{{ PRIMITIVE_ICONS[sf.primitive] }}</span>
+            <span class="font-mono truncate flex-1">{{ scatterZoneLabel(sf, idx) }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- ── Selected scatter zone (seed, count, radii, …) ── -->
+      <div v-if="selectedScatter && state.selectedScatterIndex !== null" class="px-3 py-2 border-b border-white/10 space-y-2">
+        <div class="flex items-center justify-between">
+          <p class="text-white/30 uppercase tracking-widest text-[10px]">Scatter zone</p>
+          <button
+            type="button"
+            class="text-[10px] text-red-400/80 hover:text-red-300"
+            @click="editor.removeScatterField(state.selectedScatterIndex!)"
+          >
+            Remove
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1">
+          <span class="text-white/40 col-span-2 text-[10px]">Primitive</span>
+          <button
+            v-for="prim in PRIMITIVES"
+            :key="prim"
+            type="button"
+            :class="[
+              'py-1 rounded text-[10px] transition-colors',
+              selectedScatter.primitive === prim
+                ? 'bg-emerald-700/50 text-white'
+                : 'bg-white/5 text-white/50 hover:bg-white/10',
+            ]"
+            @click="patchScatter(state.selectedScatterIndex!, { primitive: prim })"
+          >
+            {{ PRIMITIVE_ICONS[prim] }} {{ prim }}
+          </button>
+        </div>
+
+        <label class="block space-y-0.5">
+          <span class="text-white/40 text-[10px]">Seed (deterministic layout)</span>
+          <div class="flex gap-1">
+            <input
+              type="number"
+              class="flex-1 min-w-0 px-2 py-1 rounded bg-white/5 border border-white/10 font-mono text-[11px]"
+              :value="selectedScatter.seed ?? 0"
+              @change="patchScatter(state.selectedScatterIndex!, { seed: parseInt(($event.target as HTMLInputElement).value, 10) || 0 })"
+            />
+            <button
+              type="button"
+              class="px-2 py-1 rounded bg-white/10 hover:bg-white/15 text-[10px] shrink-0"
+              @click="editor.randomizeScatterSeed(state.selectedScatterIndex!)"
+            >
+              Dice
+            </button>
+          </div>
+        </label>
+
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Count</span>
+            <input
+              type="range" min="0" max="200" step="1"
+              :value="selectedScatter.count"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { count: parseInt(($event.target as HTMLInputElement).value, 10) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ selectedScatter.count }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Outer R</span>
+            <input
+              type="range" min="1" max="55" step="0.5"
+              :value="selectedScatter.outerRadius"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { outerRadius: parseFloat(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ selectedScatter.outerRadius.toFixed(1) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Inner R</span>
+            <input
+              type="range" min="0" max="50" step="0.5"
+              :value="selectedScatter.innerRadius ?? 0"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { innerRadius: parseFloat(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ (selectedScatter.innerRadius ?? 0).toFixed(1) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Centre X</span>
+            <input
+              type="range" min="-50" max="50" step="0.5"
+              :value="selectedScatter.centerX ?? 0"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { centerX: parseFloat(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ (selectedScatter.centerX ?? 0).toFixed(1) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Centre Z</span>
+            <input
+              type="range" min="-50" max="50" step="0.5"
+              :value="selectedScatter.centerZ ?? 0"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { centerZ: parseFloat(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ (selectedScatter.centerZ ?? 0).toFixed(1) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Scale min</span>
+            <input
+              type="range" min="0.05" max="4" step="0.05"
+              :value="selectedScatter.scaleMin ?? 0.75"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { scaleMin: parseFloat(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ (selectedScatter.scaleMin ?? 0.75).toFixed(2) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/50 w-14 shrink-0 text-[10px]">Scale max</span>
+            <input
+              type="range" min="0.05" max="4" step="0.05"
+              :value="selectedScatter.scaleMax ?? 1.25"
+              class="flex-1 accent-emerald-500"
+              @input="patchScatter(state.selectedScatterIndex!, { scaleMax: parseFloat(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="font-mono text-white/60 w-8 text-right text-[10px]">{{ (selectedScatter.scaleMax ?? 1.25).toFixed(2) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Selected placed object ── -->
+      <div v-else-if="selected" class="px-3 py-2 border-b border-white/10 space-y-2">
         <p class="text-white/30 uppercase tracking-widest text-[10px]">Selected</p>
 
         <div class="flex items-center gap-2">
