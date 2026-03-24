@@ -5,6 +5,7 @@ import type { ThreeContext } from '@base/threejs-engine'
 import type { InputActionEvent, InputAxisEvent } from '@base/input'
 import {
   CharacterAnimationRig,
+  DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA,
   PlayerController,
   PLAYER_CAPSULE_HALF_HEIGHT,
 } from '@base/player-three'
@@ -37,6 +38,11 @@ export interface ThirdPersonSceneConfig {
   cameraHeight?: number
   cameraLateralOffset?: number
   cameraPivotHeight?: number
+  /**
+   * World Y added to the grounded root while crouching (× smoothed crouch). Negative lowers skinned meshes so feet stay on terrain.
+   * If omitted and the descriptor loads a `modelUrl`, {@link DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA} is applied automatically.
+   */
+  crouchTerrainYOffsetDelta?: number
 }
 
 const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
@@ -46,6 +52,25 @@ const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
   characterSpeed: 7,
   cameraLerp: 8,
   facingLerp: 12,
+}
+
+/**
+ * Enables {@link PlayerController} movement logs in Vite dev.
+ * - Default: **on** in dev (uses `console.log`, visible at default DevTools levels).
+ * - Silence: `localStorage.setItem('debugPlayerMove','0')` then reload.
+ * - Force on after silencing: `localStorage.removeItem('debugPlayerMove')` or set `'1'`.
+ * - URL still works: `?debugMove=1` turns **on** even if localStorage was `'0'` (highest priority).
+ */
+function playerMovementDebugEnabled(): boolean {
+  if (typeof window === 'undefined' || !import.meta.env.DEV) return false
+  try {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('debugMove') === '1' || sp.get('debugMove') === 'true') return true
+    if (window.localStorage.getItem('debugPlayerMove') === '0') return false
+  } catch {
+    /* private mode / no storage */
+  }
+  return true
 }
 
 // Re-export for consumers (SceneView, game modules).
@@ -64,6 +89,9 @@ export { THIRD_PERSON_CAMERA_PRESETS, THIRD_PERSON_CAMERA_PRESET_ORDER } from '.
  *
  * Camera: use `cameraPreset` (`close-follow` default) or override distance /
  * height / lateral / pivot. Call {@link setCameraPreset} at runtime for tactical views.
+ *
+ * **Movement debug:** In Vite dev, movement logging is **on** by default (`console.log`,
+ * `[PlayerController.move]`). Silence with `localStorage.debugPlayerMove = '0'`. Optional: `?debugMove=1`.
  */
 export class ThirdPersonSceneModule extends BaseModule {
   readonly id = 'third-person-scene'
@@ -87,8 +115,7 @@ export class ThirdPersonSceneModule extends BaseModule {
   /** Merged per frame from `input:axis` `locomotion` (keyboard + gamepad may both emit). */
   private locoSprintOr = false
   private locoCrouchOr = false
-  /** Smoothed 0–1 for camera height when crouching. */
-  private crouchCameraBlend = 0
+  private locoJogOr = false
 
   private viewCam: ThirdPersonViewCam
   private activeCameraPreset: ThirdPersonCameraPreset
@@ -122,7 +149,13 @@ export class ThirdPersonSceneModule extends BaseModule {
       characterSpeed: this.cfg.characterSpeed,
       facingLerp: this.cfg.facingLerp,
       terrainYOffset: PLAYER_CAPSULE_HALF_HEIGHT,
+      debugMovement: playerMovementDebugEnabled(),
     })
+    if (import.meta.env.DEV && playerMovementDebugEnabled()) {
+      console.log(
+        '[ThirdPersonSceneModule] Player movement debug enabled — hold W to see [PlayerController.move] lines',
+      )
+    }
   }
 
   getPlayerController(): PlayerController {
@@ -154,6 +187,13 @@ export class ThirdPersonSceneModule extends BaseModule {
       const fp =
         ch?.terrainFootprintRadius ?? (ch?.modelUrl?.trim() ? 0.22 : 0)
       this.player.setTerrainFootprintRadius(fp)
+      const crouchY =
+        this.cfg.crouchTerrainYOffsetDelta !== undefined
+          ? this.cfg.crouchTerrainYOffsetDelta
+          : ch?.modelUrl?.trim()
+            ? DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA
+            : 0
+      this.player.setCrouchTerrainYOffsetDelta(crouchY)
       this.environment      = EnvironmentRuntime.attachGame(ctx, this.descriptor.atmosphere ?? {})
     } else {
       this.effectiveRadius = this.cfg.groundRadius
@@ -173,6 +213,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       if (e.axis === 'locomotion') {
         this.locoSprintOr ||= e.value.x > 0.5
         this.locoCrouchOr ||= e.value.y > 0.5
+        this.locoJogOr ||= (e.value.z ?? 0) > 0.5
       }
     })
 
@@ -259,8 +300,10 @@ export class ThirdPersonSceneModule extends BaseModule {
   private tick(delta: number, ctx: ThreeContext): void {
     const sprintHeld = this.locoSprintOr
     const crouchHeld = this.locoCrouchOr
+    const jogHeld = this.locoJogOr
     this.locoSprintOr = false
     this.locoCrouchOr = false
+    this.locoJogOr = false
 
     this.player.tick(delta, {
       camera: ctx.camera,
@@ -275,14 +318,9 @@ export class ThirdPersonSceneModule extends BaseModule {
     this.animRig?.update(delta, this.character, snap.velocity, {
       crouch: snap.crouching,
       sprint: snap.sprinting,
+      grounded: snap.grounded,
+      jog: jogHeld,
     })
-
-    const kCam = 1 - Math.exp(-delta * 12)
-    this.crouchCameraBlend = THREE.MathUtils.lerp(
-      this.crouchCameraBlend,
-      snap.crouching ? 1 : 0,
-      kCam,
-    )
 
     this.updateCamera(delta, ctx.camera)
   }
@@ -293,7 +331,7 @@ export class ThirdPersonSceneModule extends BaseModule {
    */
   private placeCamera(camera: THREE.PerspectiveCamera, facing: number, lerpT: number): void {
     const { distance, height, lateral, pivotY } = this.viewCam
-    const cb = this.crouchCameraBlend
+    const cb = this.player.getCrouchGroundBlend()
     const effHeight = height * (1 - 0.2 * cb)
     const effPivot = pivotY * (1 - 0.35 * cb)
     const bx = Math.sin(facing) * distance
