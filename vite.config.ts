@@ -25,8 +25,13 @@ export default defineConfig(({ mode }) => ({
       }),
   ],
   resolve: {
+    /** Linked `@base/threejs-engine` can pull a second `three`; dedupe fixes instanceof / Object3D.add. */
+    dedupe: ['three'],
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+  },
+  optimizeDeps: {
+    include: ['three', '@base/threejs-engine'],
   },
 }))

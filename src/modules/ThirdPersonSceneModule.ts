@@ -3,8 +3,11 @@ import { BaseModule } from '@base/engine-core'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import type { InputActionEvent, InputAxisEvent } from '@base/input'
-import { PlayerController, PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
-import { CharacterAnimationRig } from '@/player/CharacterAnimationRig'
+import {
+  CharacterAnimationRig,
+  PlayerController,
+  PLAYER_CAPSULE_HALF_HEIGHT,
+} from '@base/player-three'
 import { SceneBuilder } from '@/scene/SceneBuilder'
 import { EnvironmentRuntime } from '@/scene/EnvironmentRuntime'
 import type { SceneDescriptor } from '@/scene/SceneDescriptor'
@@ -81,6 +84,12 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   private animRig: CharacterAnimationRig | null = null
 
+  /** Merged per frame from `input:axis` `locomotion` (keyboard + gamepad may both emit). */
+  private locoSprintOr = false
+  private locoCrouchOr = false
+  /** Smoothed 0–1 for camera height when crouching. */
+  private crouchCameraBlend = 0
+
   private viewCam: ThirdPersonViewCam
   private activeCameraPreset: ThirdPersonCameraPreset
 
@@ -141,6 +150,10 @@ export class ThirdPersonSceneModule extends BaseModule {
       this.sampler         = result.sampler
       this.effectiveRadius = result.effectiveRadius
       this.player.setTerrainYOffset(result.characterTerrainYOffset)
+      const ch = this.descriptor?.character
+      const fp =
+        ch?.terrainFootprintRadius ?? (ch?.modelUrl?.trim() ? 0.22 : 0)
+      this.player.setTerrainFootprintRadius(fp)
       this.environment      = EnvironmentRuntime.attachGame(ctx, this.descriptor.atmosphere ?? {})
     } else {
       this.effectiveRadius = this.cfg.groundRadius
@@ -156,6 +169,10 @@ export class ThirdPersonSceneModule extends BaseModule {
       const e = raw as InputAxisEvent
       if (e.axis === 'move') {
         this.player.setMoveIntent(e.value.x, e.value.y)
+      }
+      if (e.axis === 'locomotion') {
+        this.locoSprintOr ||= e.value.x > 0.5
+        this.locoCrouchOr ||= e.value.y > 0.5
       }
     })
 
@@ -240,16 +257,32 @@ export class ThirdPersonSceneModule extends BaseModule {
   // ─── Per-frame update ─────────────────────────────────────────────────────────
 
   private tick(delta: number, ctx: ThreeContext): void {
+    const sprintHeld = this.locoSprintOr
+    const crouchHeld = this.locoCrouchOr
+    this.locoSprintOr = false
+    this.locoCrouchOr = false
+
     this.player.tick(delta, {
       camera: ctx.camera,
       character: this.character,
       sampler: this.sampler,
       playableRadius: this.effectiveRadius,
+      sprintHeld,
+      crouchHeld,
     })
 
     const snap = this.player.getSnapshot()
-    const horiz = Math.hypot(snap.velocity.x, snap.velocity.z)
-    this.animRig?.update(delta, horiz)
+    this.animRig?.update(delta, this.character, snap.velocity, {
+      crouch: snap.crouching,
+      sprint: snap.sprinting,
+    })
+
+    const kCam = 1 - Math.exp(-delta * 12)
+    this.crouchCameraBlend = THREE.MathUtils.lerp(
+      this.crouchCameraBlend,
+      snap.crouching ? 1 : 0,
+      kCam,
+    )
 
     this.updateCamera(delta, ctx.camera)
   }
@@ -260,20 +293,23 @@ export class ThirdPersonSceneModule extends BaseModule {
    */
   private placeCamera(camera: THREE.PerspectiveCamera, facing: number, lerpT: number): void {
     const { distance, height, lateral, pivotY } = this.viewCam
+    const cb = this.crouchCameraBlend
+    const effHeight = height * (1 - 0.2 * cb)
+    const effPivot = pivotY * (1 - 0.35 * cb)
     const bx = Math.sin(facing) * distance
     const bz = Math.cos(facing) * distance
     const rx = Math.cos(facing) * lateral
     const rz = -Math.sin(facing) * lateral
 
     const p = this.character.position
-    this._camTarget.set(p.x + bx + rx, p.y + height, p.z + bz + rz)
+    this._camTarget.set(p.x + bx + rx, p.y + effHeight, p.z + bz + rz)
     if (lerpT >= 1) {
       camera.position.copy(this._camTarget)
     } else {
       camera.position.lerp(this._camTarget, lerpT)
     }
 
-    this._lookAt.copy(p).setY(p.y + pivotY)
+    this._lookAt.copy(p).setY(p.y + effPivot)
     camera.lookAt(this._lookAt)
   }
 

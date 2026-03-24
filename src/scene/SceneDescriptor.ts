@@ -251,13 +251,35 @@ export interface CharacterDescriptor {
   /** [x, z] spawn point. Y is clamped to terrain surface automatically. */
   startPosition?: [number, number]
   /**
-   * Public URL to a GLTF/GLB (e.g. `/models/hero/scene.gltf`).
-   * When set, `SceneBuilder` loads via `AssetLoader`, aligns feet to local Y=0, and parents under a root `Group`.
-   * On load failure, falls back to the capsule placeholder.
+   * Public URL to a **GLTF/GLB** or **FBX** (e.g. Mixamo download under `/public/...`).
+   * FBX uses `FBXLoader` in `@base/threejs-engine`; glTF is usually smaller and PBR-friendlier.
    */
   modelUrl?: string
   /** Uniform scale applied before bounding-box alignment. Default 1. */
   modelScale?: number
+  /**
+   * If set (> 0), multiplies scale again so axis-aligned **height** of the loaded character **clone**
+   * matches this many world units (after `modelScale`). Uses the full model subtree so multi-mesh rigs
+   * (body + legs + boots) size correctly; foot alignment still uses the primary mesh only.
+   * Measurement uses **precise** `Box3` (skinned vertices) so FBX bind-pose boxes do not under-estimate height.
+   */
+  modelFitHeight?: number
+  /**
+   * In dev, logs measured AABB heights and scale factors after load (see browser console).
+   */
+  debugCharacterBounds?: boolean
+  /**
+   * When `true` (default), drop extra `SkinnedMesh`es and keep one “primary” body mesh (avoids duplicate
+   * bind-pose bodies on some Mixamo exports). Set `false` to keep boots/feet/extra parts as separate meshes
+   * (they usually share the same skeleton; one `AnimationMixer` still drives the rig).
+   */
+  pruneExtraSkinnedMeshes?: boolean
+  /**
+   * Terrain height under the character uses the **lowest** sample in a small + pattern (see
+   * `sampleTerrainFootprintY` in `@base/player-three`). Omitted ⇒ `0.22` when `modelUrl` is set, else `0`.
+   * Set `0` to force a single centre sample only.
+   */
+  terrainFootprintRadius?: number
   /** Extra local Y offset after foot alignment (up/down tweak). Default 0. */
   modelYOffset?: number
   /** World-space Y offset from sampled terrain to character **root** when grounded (feet pivot ⇒ 0). Capsule uses capsule half-height. */
@@ -267,7 +289,7 @@ export interface CharacterDescriptor {
   /**
    * Extra glTF/GLB URLs whose **animation clips** are merged onto the player (same skeleton / bone names).
    * Quaternius **Universal Animation Library** Godot/Unreal exports match **Universal Base Characters**.
-   * Each file can be a single clip or a pack; all `animations[]` entries are appended.
+   * Each URL may be **.gltf/.glb** or **.fbx** (Mixamo); all clips are merged.
    */
   animationClipUrls?: string[]
 }

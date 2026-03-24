@@ -46,12 +46,17 @@ function onWindowKeyDown(e: KeyboardEvent): void {
 const showHint = ref(true)
 let hintTimer: ReturnType<typeof setTimeout>
 
+/** Hide WebGL + UI flash while Three.js default camera (0,0,0) runs before the scene module finishes async build. */
+const worldReady = ref(false)
+
 onMounted(async () => {
   if (!container.value) return
 
+  worldReady.value = false
   await engine.mount(container.value, context)
   await engine.mountChild('input', inputModule)
   await engine.mountChild('scene', sceneModule)
+  worldReady.value = true
 
   container.value.focus()
 
@@ -78,10 +83,25 @@ onUnmounted(async () => {
 
 <template>
   <div class="relative w-screen h-screen bg-black overflow-hidden">
-    <div ref="container" class="absolute inset-0 outline-none" tabindex="0" />
+    <div
+      ref="container"
+      class="absolute inset-0 outline-none transition-opacity duration-200"
+      :class="worldReady ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+      tabindex="0"
+    />
 
-    <!-- Back button -->
-    <div class="absolute top-4 left-4">
+    <div
+      v-if="!worldReady"
+      class="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black text-white/45 text-sm"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <span class="inline-block size-8 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />
+      <span>Loading world…</span>
+    </div>
+
+    <!-- Back button (above loading veil) -->
+    <div class="absolute top-4 left-4 z-40">
       <button
         class="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 text-white/70 hover:text-white text-xs font-medium rounded-lg backdrop-blur-sm border border-white/10 transition-all"
         @click="router.push('/')"
@@ -108,7 +128,7 @@ onUnmounted(async () => {
           </div>
         </div>
         <p class="text-white/30 text-[11px] tracking-widest uppercase text-center">
-          move · Space jump (buffer)
+          move · Shift sprint · Ctrl crouch · Space jump (buffer)
         </p>
         <p class="text-white/20 text-[10px] tracking-wider">[ ] cycle camera rig</p>
       </div>

@@ -8,12 +8,13 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@base/audio": "link:../SHARED/packages/audio",
     "@base/engine-core": "link:../SHARED/packages/engine-core",
     "@base/input": "link:../SHARED/packages/input",
+    "@base/player-three": "link:../SHARED/packages/player-three",
     "@base/threejs-engine": "link:../SHARED/packages/threejs-engine",
     "pinia": "^2.2.0",
     "three": "^0.172.0",

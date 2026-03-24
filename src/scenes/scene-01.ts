@@ -1,27 +1,11 @@
 import type { SceneDescriptor } from '@/scene/SceneDescriptor'
+import { MIXAMO_FBX_CLIP_URLS } from '@/scenes/mixamoFbxClipUrls'
 
-/**
- * Quaternius **Universal Base Characters [Standard]** — glTF in `Godot - UE` (paired `.bin` + textures).
- * Use `encodeURI` so spaces and `[Standard]` survive in fetches.
- */
-export const UBC_STANDARD_MALE_GLTF = encodeURI(
-  '/models/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf',
-)
-export const UBC_STANDARD_FEMALE_GLTF = encodeURI(
-  '/models/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Female_FullBody.gltf',
-)
+/** Mixamo Remy (skin) — path must be `encodeURI` if it contains spaces. */
+export const MIXAMO_REMY_FBX = encodeURI('/Remy.fbx')
 
-/**
- * When you add **Universal Animation Library [Standard]** Godot/Unreal **glTF** clips under
- * `public/animations/Universal Animation Library[Standard]/…`, list them here (encode with `encodeURI`).
- * Same humanoid rig as Universal Base Characters — clips merge into `CharacterAnimationRig`.
- *
- * Example (uncomment when files exist):
- * `encodeURI('/animations/Universal Animation Library[Standard]/Unreal-Godot/Walking.gltf')`
- */
-export const UAL_STANDARD_ANIMATION_CLIP_URLS: string[] = [
-  // Add walking / idle glTF URLs here after extracting the pack.
-]
+/** Mixamo clips under `public/fbx/` merged onto Remy (same rig). */
+export const MIXAMO_ANIMATION_CLIP_URLS: string[] = [...MIXAMO_FBX_CLIP_URLS]
 
 export const scene01: SceneDescriptor = {
   terrain: {
@@ -75,11 +59,15 @@ export const scene01: SceneDescriptor = {
   },
   character: {
     startPosition: [0, 0],
-    modelUrl: UBC_STANDARD_MALE_GLTF,
+    modelUrl: MIXAMO_REMY_FBX,
+    /** Leave at 1 when using `modelFitHeight` — Mixamo unit scale varies; fit pass sets real-world size. */
     modelScale: 1,
-    /** Tweak if feet slide or model faces wrong way vs movement (−Z forward). */
-    rotationY: 0,
-    animationClipUrls: UAL_STANDARD_ANIMATION_CLIP_URLS,
+    /** Metres tall in world space (precise skinned AABB, full clone). */
+    modelFitHeight: 1.78,
+    /** Remy is often split into body / legs / boots; pruning drops separate foot meshes. */
+    pruneExtraSkinnedMeshes: false,
+    rotationY: Math.PI,
+    animationClipUrls: MIXAMO_ANIMATION_CLIP_URLS,
   },
   objects: [
     {

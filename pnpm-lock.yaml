@@ -17,6 +17,9 @@ importers:
       '@base/input':
         specifier: link:../SHARED/packages/input
         version: link:../SHARED/packages/input
+      '@base/player-three':
+        specifier: link:../SHARED/packages/player-three
+        version: link:../SHARED/packages/player-three
       '@base/threejs-engine':
         specifier: link:../SHARED/packages/threejs-engine
         version: link:../SHARED/packages/threejs-engine

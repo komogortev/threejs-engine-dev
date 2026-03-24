@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { TerrainSurfaceSampler } from '@base/player-three'
 import type { TerrainFeature, HillFeature, LakeFeature, RiverFeature, PathPoint } from './SceneDescriptor'
 import { type HeightmapData, sampleHeightmap } from './HeightmapLoader'
 
@@ -37,7 +38,7 @@ interface RiverCache {
  * all hills and lakes, then pre-bakes river curves with correct floor Y values.
  * At runtime, `sample()` replicates this two-pass logic cheaply.
  */
-export class TerrainSampler {
+export class TerrainSampler implements TerrainSurfaceSampler {
   private readonly hills: HillFeature[] = []
   private readonly lakes: LakeFeature[] = []
   private readonly rivers: RiverCache[] = []

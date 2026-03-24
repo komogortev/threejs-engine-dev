@@ -16,7 +16,14 @@ import { TerrainSampler } from './TerrainSampler'
 import { type HeightmapData, loadHeightmap } from './HeightmapLoader'
 import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from './PrimitiveFactory'
 import { createSeeder } from './Seeder'
-import { PLAYER_CAPSULE_HALF_HEIGHT } from '@/player/PlayerController'
+import {
+  largestSkinnedMesh,
+  PLAYER_CAPSULE_HALF_HEIGHT,
+  pruneExtraSkinnedMeshes,
+  retargetMixamoClipsToCharacter,
+  sampleTerrainFootprintY,
+  sanitizeMixamoClips,
+} from '@base/player-three'
 import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
 
 export interface SceneBuilderResult {
@@ -125,7 +132,10 @@ export class SceneBuilder {
 
     // ── Character ─────────────────────────────────────────────────────────────
     const [startX, startZ] = charDesc.startPosition ?? [0, 0]
-    const groundY = sampler.sample(startX, startZ)
+    const footprintR =
+      charDesc.terrainFootprintRadius ??
+      (charDesc.modelUrl?.trim() ? 0.22 : 0)
+    const groundY = sampleTerrainFootprintY(sampler, startX, startZ, footprintR)
     const { object: character, terrainYOffset: characterTerrainYOffset } =
       await SceneBuilder.buildCharacter(ctx, charDesc)
     character.position.set(startX, groundY + characterTerrainYOffset, startZ)
@@ -243,10 +253,69 @@ export class SceneBuilder {
     return mesh
   }
 
-  // ─── Character (capsule or GLTF) ───────────────────────────────────────────
+  // ─── Character (capsule or glTF / FBX) ─────────────────────────────────────
+
+  private static isFbxUrl(url: string): boolean {
+    return /\.fbx(\?.*)?$/i.test(url)
+  }
 
   /**
-   * Capsule fallback, or GLTF clone with feet aligned to local Y=0 under a named root group.
+   * Mixamo FBX often names every clip `mixamo.com`; rename from the file stem so
+   * {@link CharacterAnimationRig} can match idle / walk / strafe by label.
+   */
+  private static labelClipsFromSourceUrl(url: string, clips: THREE.AnimationClip[]): void {
+    const tail = url.split(/[/\\]/).pop() ?? url
+    const decoded = decodeURIComponent(tail.replace(/\?.*$/, ''))
+    const stem = decoded.replace(/\.fbx$/i, '').trim() || 'clip'
+    let i = 0
+    for (const clip of clips) {
+      const n = clip.name.trim().toLowerCase()
+      if (
+        !n ||
+        n === 'mixamo.com' ||
+        n === 'default' ||
+        n === 'take 001' ||
+        n.startsWith('mixamo')
+      ) {
+        clip.name = clips.length > 1 ? `${stem}_${i}` : stem
+      }
+      i++
+    }
+  }
+
+  private static async loadModelWithAnimations(
+    ctx: ThreeContext,
+    url: string,
+  ): Promise<{ rootScene: THREE.Object3D; animations: THREE.AnimationClip[] }> {
+    if (SceneBuilder.isFbxUrl(url)) {
+      const r = await ctx.assets.loadFBX(url)
+      const animations = [...r.animations]
+      SceneBuilder.labelClipsFromSourceUrl(url, animations)
+      return { rootScene: r.group, animations }
+    }
+    const gltf = await ctx.assets.loadGLTF(url)
+    return { rootScene: gltf.scene, animations: [...gltf.animations] }
+  }
+
+  /** World-space vertical size of an object's axis-aligned bounds (empty ⇒ 0). */
+  private static measureWorldAabbHeight(object: THREE.Object3D, precise: boolean): number {
+    object.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(object, precise)
+    if (box.isEmpty()) return 0
+    return box.max.y - box.min.y
+  }
+
+  /** FBX often leaves bones in a posed state; sizing must match bind pose or fit math disagrees with render. */
+  private static resetSkinnedBindPose(root: THREE.Object3D): void {
+    root.traverse((o) => {
+      if (o instanceof THREE.SkinnedMesh) {
+        o.skeleton.pose()
+      }
+    })
+  }
+
+  /**
+   * Capsule fallback, or glTF/FBX clone with feet aligned to local Y=0 under a named root group.
    * `terrainPivotYOffset` is world units above sampled ground for the root pivot when grounded.
    */
   private static async buildCharacter(
@@ -256,42 +325,124 @@ export class SceneBuilder {
     const url = charDesc.modelUrl?.trim()
     if (url) {
       try {
-        const gltf = await ctx.assets.loadGLTF(url)
-        const model = cloneSkinnedRoot(gltf.scene) as THREE.Object3D
+        const { rootScene, animations } = await SceneBuilder.loadModelWithAnimations(ctx, url)
+        const model = cloneSkinnedRoot(rootScene) as THREE.Object3D
+        const doPrune = charDesc.pruneExtraSkinnedMeshes !== false
+        const skinnedTarget = doPrune
+          ? pruneExtraSkinnedMeshes(model)
+          : largestSkinnedMesh(model)
         const scale = charDesc.modelScale ?? 1
         model.scale.setScalar(scale)
+        SceneBuilder.resetSkinnedBindPose(model)
+        const fitH = charDesc.modelFitHeight
+        if (import.meta.env.DEV && charDesc.debugCharacterBounds) {
+          const hBind = SceneBuilder.measureWorldAabbHeight(model, false)
+          const hSkin = SceneBuilder.measureWorldAabbHeight(model, true)
+          console.info('[SceneBuilder] Character bounds (after modelScale)', {
+            url,
+            modelScale: scale,
+            aabbHeightBindPose: hBind,
+            aabbHeightSkinnedPrecise: hSkin,
+            modelFitHeight: fitH ?? null,
+          })
+        }
+        if (fitH != null && fitH > 0) {
+          // Default Box3 path uses geometry bind-pose AABB × world matrix. For SkinnedMesh that is often
+          // far smaller than the posed skeleton → tiny h → enormous fit multiplier → giant character.
+          const h = SceneBuilder.measureWorldAabbHeight(model, true)
+          if (h > 1e-3 && h < 5e5) {
+            model.scale.multiplyScalar(fitH / h)
+          } else if (import.meta.env.DEV) {
+            console.warn('[SceneBuilder] modelFitHeight skipped — degenerate or huge AABB', {
+              url,
+              h,
+              fitH,
+            })
+          }
+        }
+        if (import.meta.env.DEV && charDesc.debugCharacterBounds) {
+          const hAfter = SceneBuilder.measureWorldAabbHeight(model, true)
+          console.info('[SceneBuilder] Character bounds (after modelFitHeight, pre-parent)', {
+            url,
+            finalUniformScale: model.scale.x,
+            aabbHeightSkinnedPrecise: hAfter,
+          })
+        }
         convertUnlitToPbrRough(model)
 
         const root = new THREE.Group()
         root.name = 'character-root'
         root.add(model)
 
-        root.updateMatrixWorld(true)
-        const box = new THREE.Box3().setFromObject(root)
-        model.position.y -= box.min.y
-        model.position.y += charDesc.modelYOffset ?? 0
-
         const pivotY = charDesc.terrainPivotYOffset ?? 0
-        /** Visual yaw offset on the mesh only — locomotion overwrites `root.rotation.y` each frame. */
+        const modelYOffset = charDesc.modelYOffset ?? 0
+        /** Visual yaw on mesh only — apply before foot alignment so the AABB matches rendered facing. */
         const ry = charDesc.rotationY ?? 0
         if (ry !== 0) model.rotation.y = ry
 
-        const mergedClips = [...gltf.animations]
-        for (const clipUrl of charDesc.animationClipUrls ?? []) {
-          const u = clipUrl.trim()
-          if (!u) continue
-          try {
-            const animGltf = await ctx.assets.loadGLTF(u)
-            mergedClips.push(...animGltf.animations)
-          } catch (err) {
-            console.warn('[SceneBuilder] Optional animation clip URL failed:', u, err)
+        const alignSource = skinnedTarget ?? root
+        const alignFeet = (): void => {
+          root.updateMatrixWorld(true)
+          const b = new THREE.Box3().setFromObject(alignSource, true)
+          if (b.isEmpty()) return
+          model.position.set(0, -b.min.y + modelYOffset, 0)
+        }
+        alignFeet()
+
+        let mergedClips: THREE.AnimationClip[] = [...animations]
+        if (skinnedTarget) {
+          mergedClips = [
+            ...retargetMixamoClipsToCharacter(skinnedTarget, rootScene, animations),
+          ]
+          for (const clipUrl of charDesc.animationClipUrls ?? []) {
+            const u = clipUrl.trim()
+            if (!u) continue
+            try {
+              const extra = await SceneBuilder.loadModelWithAnimations(ctx, u)
+              mergedClips.push(
+                ...retargetMixamoClipsToCharacter(skinnedTarget, extra.rootScene, extra.animations),
+              )
+            } catch (err) {
+              console.warn('[SceneBuilder] Optional animation clip URL failed:', u, err)
+            }
+          }
+        } else {
+          for (const clipUrl of charDesc.animationClipUrls ?? []) {
+            const u = clipUrl.trim()
+            if (!u) continue
+            try {
+              const extra = await SceneBuilder.loadModelWithAnimations(ctx, u)
+              mergedClips.push(...extra.animations)
+            } catch (err) {
+              console.warn('[SceneBuilder] Optional animation clip URL failed:', u, err)
+            }
           }
         }
-        root.userData['gltfAnimations'] = mergedClips
+        root.userData['gltfAnimations'] = sanitizeMixamoClips(mergedClips)
+
+        // First fit used `model` off-scene; parenting + yaw can change the world AABB slightly.
+        // A second pass scales against `root` so world height matches `modelFitHeight` when it drifted.
+        if (fitH != null && fitH > 0) {
+          root.updateMatrixWorld(true)
+          const hRoot = SceneBuilder.measureWorldAabbHeight(root, true)
+          if (hRoot > 1e-3 && Math.abs(hRoot - fitH) / fitH > 0.025) {
+            model.scale.multiplyScalar(fitH / hRoot)
+            model.position.set(0, 0, 0)
+            alignFeet()
+            if (import.meta.env.DEV && charDesc.debugCharacterBounds) {
+              console.info('[SceneBuilder] Character bounds (after root-space correction)', {
+                url,
+                heightBefore: hRoot,
+                heightAfter: SceneBuilder.measureWorldAabbHeight(root, true),
+                finalUniformScale: model.scale.x,
+              })
+            }
+          }
+        }
 
         return { object: root, terrainYOffset: pivotY }
       } catch (err) {
-        console.warn('[SceneBuilder] GLTF character failed, using capsule:', url, err)
+        console.warn('[SceneBuilder] Character model failed, using capsule:', url, err)
       }
     }
 
