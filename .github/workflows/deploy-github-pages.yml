@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Opt into Node.js 24 for JS actions (checkout, deploy-pages, etc.); see GitHub deprecation of Node 20.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   pages: write
@@ -37,7 +41,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: pnpm
           cache-dependency-path: |
             threejs-engine-dev/pnpm-lock.yaml

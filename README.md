@@ -50,12 +50,21 @@ GitHub Pages **does not run Vite**. This project deploys **static `dist/`** via 
 
 ### Repository settings
 
-1. **Settings → Pages → Build and deployment**  
+1. **Settings → Actions → General**  
+   - **Actions permissions:** allow actions (e.g. “Allow all actions and reusable workflows” for public repos).  
+   - Without this, workflows never run—**no GitHub-hosted runner is used**.
+
+2. **Self-hosted runners (optional)**  
+   - **Settings → Actions → Runners** lists **self-hosted** machines only.  
+   - This project uses **`runs-on: ubuntu-latest`**, which is **GitHub-hosted**—you do **not** need to add a runner there. An empty runner list is normal.
+
+3. **Settings → Pages → Build and deployment**  
    - **Source:** **GitHub Actions** (not “Deploy from a branch” with raw repo files).
 
-2. First deployment: **Settings → Environments → `github-pages`** — approve the environment if GitHub prompts for it.
+4. First deployment: **Settings → Environments → `github-pages`** — approve the environment if GitHub prompts for it.
 
-3. Workflow: [`.github/workflows/deploy-github-pages.yml`](.github/workflows/deploy-github-pages.yml)  
+5. Workflow: [`.github/workflows/deploy-github-pages.yml`](.github/workflows/deploy-github-pages.yml)  
+   - Sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to align with GitHub’s [Node 20 deprecation on Actions](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/); build uses Node **22** via `setup-node`.  
    - Checks out **this repo** and **[vue-three-base-packages](https://github.com/komogortev/vue-three-base-packages)** as `SHARED`  
    - Builds packages, then builds the app with `VITE_BASE_PATH=/threejs-engine-dev/`  
    - Uploads `dist/` with `actions/upload-pages-artifact@v3` (keeps dotfiles such as `.nojekyll`) and deploys with `actions/deploy-pages`
