@@ -3,7 +3,16 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
+/** GitHub project Pages lives at /repo-name/; CI sets VITE_BASE_PATH=/threejs-engine-dev/ */
+function viteBase(): string {
+  const p = process.env.VITE_BASE_PATH?.trim()
+  if (p == null || p === '' || p === '/') return '/'
+  const lead = p.startsWith('/') ? p : `/${p}`
+  return lead.endsWith('/') ? lead : `${lead}/`
+}
+
 export default defineConfig(({ mode }) => ({
+  base: viteBase(),
   plugins: [
     vue(),
     mode !== 'electron' &&
