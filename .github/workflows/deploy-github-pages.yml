@@ -5,6 +5,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -56,6 +57,7 @@ jobs:
         env:
           VITE_BASE_PATH: /threejs-engine-dev/
 
+      # v3 includes dotfiles (e.g. .nojekyll); v4 omits them by default.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: threejs-engine-dev/dist
