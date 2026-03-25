@@ -33,6 +33,7 @@ import {
   EDITOR_ORBIT_BOOKMARKS,
   EDITOR_ORBIT_LOCOMOTION_IDS,
 } from '@/editor/editorOrbitPresets'
+import { resolvePublicUrl } from '@/utils/resolvePublicUrl'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -552,14 +553,14 @@ export class EditorSceneModule extends BaseModule {
 
   /** Jump to a saved orbit (toolbar). */
   setOrbitBookmarkIndex(index: number): void {
-    if (this._playSimulation) return
+    if (this._playSimulation || !this.orbit) return
     if (index < 0 || index >= EDITOR_ORBIT_BOOKMARKS.length) return
     this._applyOrbitBookmark(index, true)
   }
 
   /** Step saved views (keyboard `[` / `]`). */
   cycleOrbitBookmark(delta: number): void {
-    if (this._playSimulation) return
+    if (this._playSimulation || !this.orbit) return
     this._applyOrbitBookmark(this._orbitBookmarkIndex + delta, true)
   }
 
@@ -812,6 +813,7 @@ export class EditorSceneModule extends BaseModule {
   }
 
   private _applyOrbitBookmark(index: number, emit: boolean): void {
+    if (!this.orbit) return
     const n = EDITOR_ORBIT_BOOKMARKS.length
     this._orbitBookmarkIndex = ((index % n) + n) % n
     const b = EDITOR_ORBIT_BOOKMARKS[this._orbitBookmarkIndex]
@@ -900,7 +902,7 @@ export class EditorSceneModule extends BaseModule {
       // Async swap: load the real model and replace the placeholder
       const gltfDesc = desc as GltfObject
       try {
-        const gltf  = await this._ctx.assets.loadGLTF(gltfDesc.url)
+        const gltf  = await this._ctx.assets.loadGLTF(resolvePublicUrl(gltfDesc.url))
         const model = gltf.scene.clone(true)
         convertUnlitToPbrRough(model)
         model.position.copy(placeholder.position)
@@ -1229,7 +1231,7 @@ export class EditorSceneModule extends BaseModule {
     this._clearWalkModeOnly()
     this._playSimulation = false
     this._syncTransformEnabled()
-    this.orbit.enabled = true
+    if (this.orbit) this.orbit.enabled = true
     this._refreshSpawnMarkerPosition()
     if (this._spawnMarker) this._spawnMarker.visible = true
     this._applyOrbitBookmark(this._orbitBookmarkIndex, true)

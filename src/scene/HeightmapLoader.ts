@@ -1,4 +1,5 @@
 import type { HeightmapFeature } from './SceneDescriptor'
+import { resolvePublicUrl } from '@/utils/resolvePublicUrl'
 
 /**
  * Pre-decoded heightmap ready for fast per-vertex sampling.
@@ -66,8 +67,9 @@ export function loadHeightmap(
       })
     }
 
-    img.onerror = () => reject(new Error(`HeightmapLoader: failed to load "${feature.url}"`))
-    img.src = feature.url
+    const src = resolvePublicUrl(feature.url)
+    img.onerror = () => reject(new Error(`HeightmapLoader: failed to load "${src}"`))
+    img.src = src
   })
 }
 

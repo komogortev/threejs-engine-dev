@@ -43,7 +43,8 @@ export default defineConfig(({ mode }) => {
         mode !== 'electron' &&
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['favicon.ico'],
+          /** No `public/` icon files yet — listing missing paths causes 404 on every load. */
+          includeAssets: [],
           scope: base,
           manifest: {
             name: 'threejs-engine-dev',
@@ -54,10 +55,6 @@ export default defineConfig(({ mode }) => {
             display: 'standalone',
             start_url: base,
             scope: base,
-            icons: [
-              { src: `${base}pwa-192x192.png`, sizes: '192x192', type: 'image/png' },
-              { src: `${base}pwa-512x512.png`, sizes: '512x512', type: 'image/png' },
-            ],
           },
           workbox: {
             navigateFallback: `${base}index.html`,
