@@ -11,6 +11,9 @@ importers:
       '@base/audio':
         specifier: link:../SHARED/packages/audio
         version: link:../SHARED/packages/audio
+      '@base/camera-three':
+        specifier: link:../SHARED/packages/camera-three
+        version: link:../SHARED/packages/camera-three
       '@base/engine-core':
         specifier: link:../SHARED/packages/engine-core
         version: link:../SHARED/packages/engine-core

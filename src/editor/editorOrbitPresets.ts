@@ -8,6 +8,9 @@ export interface EditorOrbitBookmark {
   target: [number, number, number]
 }
 
+/** Orbit presets where WASD moves the session avatar (camera-relative); mouse still orbits / places. */
+export const EDITOR_ORBIT_LOCOMOTION_IDS = new Set<string>(['author', 'bird'])
+
 export const EDITOR_ORBIT_BOOKMARKS: EditorOrbitBookmark[] = [
   {
     id:      'overview',

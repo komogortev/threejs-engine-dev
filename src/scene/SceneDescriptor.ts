@@ -379,4 +379,9 @@ export interface SceneDescriptor {
   atmosphere?: AtmosphereDescriptor
   character?: CharacterDescriptor
   objects?: SceneObject[]
+  /**
+   * When true, {@link SceneBuilder.build} skips spawning the player character (editor orbit view;
+   * walk mode adds a temporary avatar via {@link SceneBuilder.buildCharacter}).
+   */
+  skipPlayerCharacter?: boolean
 }

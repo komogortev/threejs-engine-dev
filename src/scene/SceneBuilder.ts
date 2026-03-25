@@ -28,10 +28,10 @@ import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
 
 export interface SceneBuilderResult {
   sampler: TerrainSampler
-  /** Locomotion root: capsule mesh or `Group` with loaded GLTF; driven by `PlayerController` pose. */
-  character: THREE.Object3D
-  /** Passed to `PlayerController.setTerrainYOffset` — capsule half-height or 0 for foot-grounded GLTF. */
-  characterTerrainYOffset: number
+  /** Locomotion root — omitted when `descriptor.skipPlayerCharacter` is true. */
+  character?: THREE.Object3D
+  /** Passed to `PlayerController.setTerrainYOffset` — set with `character`. */
+  characterTerrainYOffset?: number
   terrainMesh: THREE.Mesh
   effectiveRadius: number
   /** All procedural scatter instances live under this group (editor can rebuild in place). */
@@ -50,7 +50,7 @@ export interface SceneBuilderResult {
  *   3. Terrain mesh (height-displaced PlaneGeometry)
  *   4. Water surface (single plane at seaLevel, only when terrain goes negative)
  *   5. Boundary ring (thin emissive torus at playable edge)
- *   6. Character capsule (positioned at terrain surface at startPosition)
+ *   6. Character (unless `skipPlayerCharacter`)
  *   7. Scene objects (explicit PlacedObjects + seeded ScatterFields)
  */
 export class SceneBuilder {
@@ -131,15 +131,20 @@ export class SceneBuilder {
     ctx.scene.add(SceneBuilder.buildBoundaryRing(radius))
 
     // ── Character ─────────────────────────────────────────────────────────────
-    const [startX, startZ] = charDesc.startPosition ?? [0, 0]
-    const footprintR =
-      charDesc.terrainFootprintRadius ??
-      (charDesc.modelUrl?.trim() ? 0.22 : 0)
-    const groundY = sampleTerrainFootprintY(sampler, startX, startZ, footprintR)
-    const { object: character, terrainYOffset: characterTerrainYOffset } =
-      await SceneBuilder.buildCharacter(ctx, charDesc)
-    character.position.set(startX, groundY + characterTerrainYOffset, startZ)
-    ctx.scene.add(character)
+    let character: THREE.Object3D | undefined
+    let characterTerrainYOffset: number | undefined
+    if (!descriptor.skipPlayerCharacter) {
+      const [startX, startZ] = charDesc.startPosition ?? [0, 0]
+      const footprintR =
+        charDesc.terrainFootprintRadius ??
+        (charDesc.modelUrl?.trim() ? 0.22 : 0)
+      const groundY = sampleTerrainFootprintY(sampler, startX, startZ, footprintR)
+      const built = await SceneBuilder.buildCharacter(ctx, charDesc)
+      character = built.object
+      characterTerrainYOffset = built.terrainYOffset
+      character.position.set(startX, groundY + characterTerrainYOffset, startZ)
+      ctx.scene.add(character)
+    }
 
     // ── Objects ───────────────────────────────────────────────────────────────
     const scatterRoot = new THREE.Group()
@@ -318,7 +323,11 @@ export class SceneBuilder {
    * Capsule fallback, or glTF/FBX clone with feet aligned to local Y=0 under a named root group.
    * `terrainPivotYOffset` is world units above sampled ground for the root pivot when grounded.
    */
-  private static async buildCharacter(
+  /**
+   * Capsule fallback, or skinned glTF/FBX (same path as full {@link SceneBuilder.build}).
+   * Harnesses (e.g. editor walk) may call this without rebuilding terrain.
+   */
+  static async buildCharacter(
     ctx: ThreeContext,
     charDesc: CharacterDescriptor,
   ): Promise<{ object: THREE.Object3D; terrainYOffset: number }> {

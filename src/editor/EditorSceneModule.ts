@@ -4,6 +4,18 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { BaseModule } from '@base/engine-core'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
+import type { InputActionEvent, InputAxisEvent } from '@base/input'
+import {
+  GameplayCameraController,
+  THIRD_PERSON_CAMERA_PRESET_ORDER,
+} from '@base/camera-three'
+import {
+  CharacterAnimationRig,
+  DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA,
+  PlayerController,
+  PLAYER_CAPSULE_HALF_HEIGHT,
+  sampleTerrainFootprintY,
+} from '@base/player-three'
 import { EnvironmentRuntime, type EnvironmentState } from '@/scene/EnvironmentRuntime'
 import { SceneBuilder } from '@/scene/SceneBuilder'
 import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from '@/scene/PrimitiveFactory'
@@ -17,7 +29,10 @@ import type {
   AtmosphereDescriptor,
 } from '@/scene/SceneDescriptor'
 import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
-import { EDITOR_ORBIT_BOOKMARKS } from '@/editor/editorOrbitPresets'
+import {
+  EDITOR_ORBIT_BOOKMARKS,
+  EDITOR_ORBIT_LOCOMOTION_IDS,
+} from '@/editor/editorOrbitPresets'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +59,10 @@ export interface EditorState {
   /** Index into {@link EDITOR_ORBIT_BOOKMARKS}. */
   orbitBookmarkIndex:   number
   orbitBookmarkLabel:   string
+  /** Walk the terrain with gameplay camera (orbit + gizmo disabled). */
+  playSimulation:       boolean
+  /** e.g. `3p · close-follow` or `1p` — empty when not playing. */
+  playCameraHud:        string
 }
 
 // ─── Colours for scatter zone rings ──────────────────────────────────────────
@@ -137,6 +156,12 @@ function makeGltfGhost(): THREE.Mesh {
  * - Ghost preview under cursor for the active tool
  * - T / R / S / Delete / Escape keyboard shortcuts
  * - `onStateChanged` callback bridges module state into Vue reactivity
+ * - **Session avatar** (lazy): one skinned/capsule rig shared by **Author** / **Bird-eye** orbit
+ *   ({@link EDITOR_ORBIT_LOCOMOTION_IDS}) with `PlayerController` **`movementBasis: 'camera'`**;
+ *   each frame the **orbit pivot + camera translate** with the avatar so view matches gameplay, while
+ *   **OrbitControls** still own rotation / zoom / pan from pointer input.
+ * - **Walk scene** (`movementBasis: 'facing'` + {@link GameplayCameraController}).
+ * - **Overview** / **Corner**: avatar hidden; WASD off. **Esc** / toolbar ends walk.
  */
 export class EditorSceneModule extends BaseModule {
   readonly id = 'editor-scene'
@@ -154,6 +179,9 @@ export class EditorSceneModule extends BaseModule {
   private transform!: TransformControls
   private raycaster = new THREE.Raycaster()
   private mouse     = new THREE.Vector2()
+  /** Pre-tick avatar position for orbit-follow; delta applied to camera + orbit.target. */
+  private readonly _orbitFollowPrev = new THREE.Vector3()
+  private readonly _orbitFollowDelta = new THREE.Vector3()
 
   // ── Editor state ────────────────────────────────────────────────────────────
 
@@ -190,6 +218,26 @@ export class EditorSceneModule extends BaseModule {
 
   private _orbitBookmarkIndex = 0
 
+  // ── Play simulation (capsule + PlayerController + GameplayCameraController) ─
+
+  private _playSimulation = false
+  private _player: PlayerController | null = null
+  /** Session avatar (loaded once); used in walk mode and in author/bird orbit locomotion. */
+  private _avatarRoot: THREE.Object3D | null = null
+  private _gameplayCam: GameplayCameraController | null = null
+  private _locoSprintOr = false
+  private _locoCrouchOr = false
+  private _locoJogOr = false
+  private _playPresetIndex = 0
+  private _playEnterCancelled = false
+  private _animRig: CharacterAnimationRig | null = null
+
+  /** Walk spawn XZ — updated when exiting walk so the next session resumes from last pose. */
+  private _walkSpawnX!: number
+  private _walkSpawnZ!: number
+  /** Flat ring on terrain showing next walk spawn in edit mode. */
+  private _spawnMarker: THREE.Mesh | null = null
+
   // ── Cleanup refs ────────────────────────────────────────────────────────────
 
   private _offPointerDown!:  (e: PointerEvent) => void
@@ -197,6 +245,8 @@ export class EditorSceneModule extends BaseModule {
   private _offKeyDown!:      (e: KeyboardEvent) => void
   private _offContextMenu!:  (e: MouseEvent) => void
   private _unregisterLoop:   (() => void) | null = null
+  private _offInputAxis:     (() => void) | null = null
+  private _offInputAction:   (() => void) | null = null
 
   // ── Vue bridge callback ─────────────────────────────────────────────────────
 
@@ -208,6 +258,9 @@ export class EditorSceneModule extends BaseModule {
   constructor(descriptor: SceneDescriptor) {
     super()
     this.descriptor = descriptor
+    const sp = descriptor.character?.startPosition ?? [0, 0]
+    this._walkSpawnX = sp[0] ?? 0
+    this._walkSpawnZ = sp[1] ?? 0
   }
 
   // ─── Mount ───────────────────────────────────────────────────────────────────
@@ -224,8 +277,12 @@ export class EditorSceneModule extends BaseModule {
       else                        placedItems.push(obj as EditorObject)
     }
 
-    // Build terrain + scatter; editor manages explicit objects separately
-    const buildDesc: SceneDescriptor = { ...this.descriptor, objects: scatterItems }
+    // Build terrain + scatter; no static player (walk mode spawns a temporary avatar).
+    const buildDesc: SceneDescriptor = {
+      ...this.descriptor,
+      objects: scatterItems,
+      skipPlayerCharacter: true,
+    }
     const result      = await SceneBuilder.build(ctx, buildDesc)
     this.terrainMesh  = result.terrainMesh
     this._sampler     = result.sampler
@@ -263,6 +320,9 @@ export class EditorSceneModule extends BaseModule {
     this.transform.addEventListener('dragging-changed', (e) => {
       this.orbit.enabled = !(e as unknown as { value: boolean }).value
     })
+    // No selection → keep TransformControls disabled so it does not call setPointerCapture /
+    // add pointermove on every click (that fights OrbitControls, especially in Author/Bird-eye).
+    this._syncTransformEnabled()
     this.transform.addEventListener('mouseUp', () => { this._syncSelectedDescriptor() })
     this.transform.addEventListener('objectChange', () => {
       if (this._gizmoMode === 'scale' && this._selectedIndex !== null) {
@@ -284,9 +344,37 @@ export class EditorSceneModule extends BaseModule {
     canvas.addEventListener('contextmenu',  this._offContextMenu)
     window.addEventListener('keydown',      this._offKeyDown)
 
+    this._createSpawnMarker()
+
+    this._offInputAxis = context.eventBus.on('input:axis', (raw) => {
+      if (!this._locomotionInputActive()) return
+      const e = raw as InputAxisEvent
+      if (e.axis === 'move') {
+        this._player?.setMoveIntent(e.value.x, e.value.y)
+      }
+      if (e.axis === 'locomotion') {
+        this._locoSprintOr ||= e.value.x > 0.5
+        this._locoCrouchOr ||= e.value.y > 0.5
+        this._locoJogOr ||= (e.value.z ?? 0) > 0.5
+      }
+    })
+
+    this._offInputAction = context.eventBus.on('input:action', (raw) => {
+      if (!this._locomotionInputActive()) return
+      const e = raw as InputActionEvent
+      if (e.action === 'jump' && e.type === 'pressed') {
+        this._player?.notifyJumpPressed()
+      }
+    })
+
     this._unregisterLoop = ctx.registerSystem('editor-frame', (delta) => {
       this._env.update(delta)
-      this.orbit.update()
+      if (this._playSimulation) {
+        this._playTick(delta)
+      } else {
+        this.orbit.update()
+        this._editOrbitLocomotionTick(delta)
+      }
     })
 
     this._emitState()
@@ -303,6 +391,18 @@ export class EditorSceneModule extends BaseModule {
     canvas.removeEventListener('pointermove',  this._offPointerMove)
     canvas.removeEventListener('contextmenu',  this._offContextMenu)
     window.removeEventListener('keydown',      this._offKeyDown)
+    this._offInputAxis?.()
+    this._offInputAction?.()
+    this._offInputAxis = null
+    this._offInputAction = null
+    this._disposeSessionAvatar()
+    if (this._spawnMarker) {
+      this._ctx.scene.remove(this._spawnMarker)
+      this._spawnMarker.geometry.dispose()
+      const m = this._spawnMarker.material
+      if (!Array.isArray(m)) (m as THREE.Material).dispose()
+      this._spawnMarker = null
+    }
     this.orbit.dispose()
     this.transform.dispose()
     this._unregisterLoop?.()
@@ -317,6 +417,7 @@ export class EditorSceneModule extends BaseModule {
   get activeGltfUrl(): string        { return this._activeGltfUrl }
 
   setActiveTool(tool: EditorTool): void {
+    if (this._playSimulation) return
     this._activeTool = tool
     this._selectedScatterIndex = null
     this._deselect()
@@ -451,13 +552,55 @@ export class EditorSceneModule extends BaseModule {
 
   /** Jump to a saved orbit (toolbar). */
   setOrbitBookmarkIndex(index: number): void {
+    if (this._playSimulation) return
     if (index < 0 || index >= EDITOR_ORBIT_BOOKMARKS.length) return
     this._applyOrbitBookmark(index, true)
   }
 
   /** Step saved views (keyboard `[` / `]`). */
   cycleOrbitBookmark(delta: number): void {
+    if (this._playSimulation) return
     this._applyOrbitBookmark(this._orbitBookmarkIndex + delta, true)
+  }
+
+  /**
+   * Enter or exit walk-the-scene mode: character at `descriptor.character.startPosition`
+   * (`modelUrl` or capsule), `@base/input`, `PlayerController`, optional `CharacterAnimationRig`, `@base/camera-three`.
+   */
+  setPlaySimulation(on: boolean): void {
+    if (on === this._playSimulation) return
+    if (on) void this._enterPlaySim()
+    else this._exitPlaySim()
+  }
+
+  /** While playing: cycle third-person preset (`[` / `]`). */
+  cyclePlayCameraPreset(delta: number): void {
+    if (!this._playSimulation || !this._gameplayCam) return
+    if (this._gameplayCam.getMode() !== 'third-person') return
+    const order = THIRD_PERSON_CAMERA_PRESET_ORDER
+    const cur = this._gameplayCam.getCameraPreset()
+    let i = order.indexOf(cur)
+    if (i < 0) i = 0
+    i = (i + delta + order.length) % order.length
+    const next = order[i]!
+    this._gameplayCam.setCameraPreset(next)
+    this._playPresetIndex = i
+    this._emitState()
+  }
+
+  /** While playing: toggle first- vs third-person (**B**). */
+  togglePlayCameraMode(): void {
+    if (!this._playSimulation || !this._gameplayCam || !this._avatarRoot || !this._player) return
+    const next =
+      this._gameplayCam.getMode() === 'third-person' ? 'first-person' : 'third-person'
+    this._gameplayCam.setMode(next)
+    this._gameplayCam.snapToCharacter(
+      this._ctx.camera,
+      this._avatarRoot,
+      this._player.getFacing(),
+      this._player.getCrouchGroundBlend(),
+    )
+    this._emitState()
   }
 
   updateSelectedScale(scale: number): void {
@@ -546,6 +689,8 @@ export class EditorSceneModule extends BaseModule {
   // ─── Pointer handlers ─────────────────────────────────────────────────────────
 
   private async _handlePointerDown(e: PointerEvent): Promise<void> {
+    if (this._playSimulation) return
+
     // Right-click: re-anchor orbit pivot to terrain point
     if (e.button === 2) {
       this._updateMouse(e, this._ctx.renderer)
@@ -591,6 +736,7 @@ export class EditorSceneModule extends BaseModule {
   }
 
   private _handlePointerMove(e: PointerEvent): void {
+    if (this._playSimulation) return
     if (this._activeTool === 'select') return
     if (this._selectedIndex !== null) return
 
@@ -615,6 +761,36 @@ export class EditorSceneModule extends BaseModule {
   private _handleKeyDown(e: KeyboardEvent): void {
     const tag = (e.target as HTMLElement).tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+    if (this._playSimulation) {
+      if (e.code === 'Escape') {
+        e.preventDefault()
+        this.setPlaySimulation(false)
+        return
+      }
+      if (e.code === 'BracketLeft') {
+        e.preventDefault()
+        this.cyclePlayCameraPreset(-1)
+        return
+      }
+      if (e.code === 'BracketRight') {
+        e.preventDefault()
+        this.cyclePlayCameraPreset(1)
+        return
+      }
+      if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault()
+        this.togglePlayCameraMode()
+        return
+      }
+      return
+    }
+
+    if (e.code === 'KeyP') {
+      e.preventDefault()
+      this.setPlaySimulation(true)
+      return
+    }
     if (e.code === 'BracketLeft') {
       e.preventDefault()
       this.cycleOrbitBookmark(-1)
@@ -643,7 +819,33 @@ export class EditorSceneModule extends BaseModule {
     this._ctx.camera.position.set(b.camera[0], b.camera[1], b.camera[2])
     this.orbit.target.set(b.target[0], b.target[1], b.target[2])
     this.orbit.update()
+    void this._syncOrbitLocomotionForBookmark()
     if (emit) this._emitState()
+  }
+
+  /** Author + Bird-eye: WASD moves avatar with `movementBasis: 'camera'` while mouse orbits. */
+  private _orbitLocomotionActive(): boolean {
+    if (this._playSimulation) return false
+    const id = EDITOR_ORBIT_BOOKMARKS[this._orbitBookmarkIndex]?.id
+    return id !== undefined && EDITOR_ORBIT_LOCOMOTION_IDS.has(id)
+  }
+
+  private _locomotionInputActive(): boolean {
+    return this._playSimulation || this._orbitLocomotionActive()
+  }
+
+  private async _syncOrbitLocomotionForBookmark(): Promise<void> {
+    if (this._playSimulation) return
+    if (this._orbitLocomotionActive()) {
+      await this._ensureSessionAvatar()
+      if (this._avatarRoot) this._avatarRoot.visible = true
+      this._player?.setMovementBasis('camera')
+      this._panOrbitRigToSessionAvatar()
+    } else {
+      if (this._avatarRoot) this._avatarRoot.visible = false
+      this._player?.setMoveIntent(0, 0)
+      this._player?.setMovementBasis('facing')
+    }
   }
 
   // ─── Placement ───────────────────────────────────────────────────────────────
@@ -715,7 +917,10 @@ export class EditorSceneModule extends BaseModule {
           this._nodeToDesc.set(model, desc)
           this._descToNode.set(desc, model)
           // If this object is currently selected, re-attach the gizmo
-          if (this._selectedIndex === idx) this.transform.attach(model)
+          if (this._selectedIndex === idx) {
+            this.transform.attach(model)
+            this._syncTransformEnabled()
+          }
         }
       } catch {
         console.warn(`[EditorSceneModule] GLTF load failed: ${gltfDesc.url}`)
@@ -741,17 +946,25 @@ export class EditorSceneModule extends BaseModule {
 
   // ─── Selection ───────────────────────────────────────────────────────────────
 
+  /** Gizmo off when nothing selected — avoids TransformControls stealing pointer from OrbitControls. */
+  private _syncTransformEnabled(): void {
+    if (this._playSimulation) return
+    this.transform.enabled = this._selectedIndex !== null
+  }
+
   private _selectIndex(idx: number): void {
     this._selectedScatterIndex = null
     this._selectedIndex = idx
     const node = this._placedNodes[idx]
     if (node) this.transform.attach(node)
+    this._syncTransformEnabled()
     this._emitState()
   }
 
   private _deselect(): void {
     this._selectedIndex = null
     this.transform.detach()
+    this._syncTransformEnabled()
     this._emitState()
   }
 
@@ -769,6 +982,7 @@ export class EditorSceneModule extends BaseModule {
     this._objects.splice(idx, 1)
     this._placedNodes.splice(idx, 1)
     this._selectedIndex = null
+    this._syncTransformEnabled()
     this._emitState()
   }
 
@@ -915,8 +1129,39 @@ export class EditorSceneModule extends BaseModule {
     )
   }
 
+  /** Green ring on terrain: next walk spawn while editing (hidden during walk). */
+  private _createSpawnMarker(): void {
+    const geo = new THREE.RingGeometry(0.4, 0.65, 48)
+    geo.rotateX(-Math.PI / 2)
+    const mat = new THREE.MeshBasicMaterial({
+      color:       0x34d399,
+      transparent: true,
+      opacity:     0.48,
+      side:        THREE.DoubleSide,
+      depthWrite:  false,
+    })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.name = 'editor-walk-spawn-marker'
+    mesh.frustumCulled = false
+    this._spawnMarker = mesh
+    this._refreshSpawnMarkerPosition()
+    this._ctx.scene.add(mesh)
+  }
+
+  private _refreshSpawnMarkerPosition(): void {
+    if (!this._spawnMarker) return
+    const y = this._sampler.sample(this._walkSpawnX, this._walkSpawnZ) + 0.08
+    this._spawnMarker.position.set(this._walkSpawnX, y, this._walkSpawnZ)
+  }
+
   private _emitState(): void {
     const bm = EDITOR_ORBIT_BOOKMARKS[this._orbitBookmarkIndex]
+    let playCameraHud = ''
+    if (this._playSimulation && this._gameplayCam) {
+      const m = this._gameplayCam.getMode()
+      playCameraHud =
+        m === 'first-person' ? '1p' : `3p · ${this._gameplayCam.getCameraPreset()}`
+    }
     this.onStateChanged?.({
       objects:              [...this._objects],
       selectedIndex:        this._selectedIndex,
@@ -928,6 +1173,255 @@ export class EditorSceneModule extends BaseModule {
       environment:          this._env.getState(),
       orbitBookmarkIndex:   this._orbitBookmarkIndex,
       orbitBookmarkLabel:   bm?.label ?? '—',
+      playSimulation:       this._playSimulation,
+      playCameraHud,
     })
+  }
+
+  // ─── Play simulation internals ───────────────────────────────────────────────
+
+  private async _enterPlaySim(): Promise<void> {
+    this._playEnterCancelled = false
+    if (this._spawnMarker) this._spawnMarker.visible = false
+    this._deselect()
+    this._removeGhost()
+    await this._ensureSessionAvatar()
+    if (this._playEnterCancelled) {
+      this._clearWalkModeOnly()
+      return
+    }
+    if (!this._player || !this._avatarRoot) return
+
+    this._player.setMovementBasis('facing')
+
+    const preset = THIRD_PERSON_CAMERA_PRESET_ORDER[this._playPresetIndex] ?? 'close-follow'
+    const ch = this.descriptor.character ?? {}
+    this._gameplayCam = new GameplayCameraController({
+      cameraLerp: 8,
+      cameraPreset: preset,
+      mode: 'third-person',
+      firstPerson:
+        ch.modelUrl?.trim()
+          ? { eyeOffsetY: 0.75, crouchEyeDrop: 0.28 }
+          : undefined,
+    })
+
+    this.orbit.enabled = false
+    this.transform.detach()
+    this.transform.enabled = false
+
+    this._playSimulation = true
+    this._gameplayCam.snapToCharacter(
+      this._ctx.camera,
+      this._avatarRoot,
+      this._player.getFacing(),
+      this._player.getCrouchGroundBlend(),
+    )
+    this._emitState()
+  }
+
+  private _exitPlaySim(): void {
+    if (this._avatarRoot) {
+      this._walkSpawnX = this._avatarRoot.position.x
+      this._walkSpawnZ = this._avatarRoot.position.z
+    }
+    this._playEnterCancelled = true
+    this._clearWalkModeOnly()
+    this._playSimulation = false
+    this._syncTransformEnabled()
+    this.orbit.enabled = true
+    this._refreshSpawnMarkerPosition()
+    if (this._spawnMarker) this._spawnMarker.visible = true
+    this._applyOrbitBookmark(this._orbitBookmarkIndex, true)
+    this._emitState()
+  }
+
+  /** Loads skinned or capsule avatar once; shared by orbit locomotion and walk mode. */
+  private async _ensureSessionAvatar(): Promise<void> {
+    if (this._avatarRoot && this._player) return
+
+    const ch = this.descriptor.character ?? {}
+    const x = this._walkSpawnX
+    const z = this._walkSpawnZ
+    const footprint = ch.terrainFootprintRadius ?? (ch.modelUrl?.trim() ? 0.22 : 0)
+    const groundY = sampleTerrainFootprintY(this._sampler, x, z, footprint)
+
+    let root: THREE.Object3D
+    let terrainYOffset: number
+
+    if (ch.modelUrl?.trim()) {
+      const built = await SceneBuilder.buildCharacter(this._ctx, ch)
+      if (this._playEnterCancelled) {
+        EditorSceneModule._disposePlayCharacterResources(built.object)
+        return
+      }
+      root = built.object
+      root.name = 'editor-session-character'
+      terrainYOffset = built.terrainYOffset
+    } else {
+      const mesh = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.35, 1.0, 8, 16),
+        new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.5, metalness: 0.15 }),
+      )
+      mesh.name = 'editor-session-capsule'
+      root = mesh
+      terrainYOffset = PLAYER_CAPSULE_HALF_HEIGHT
+    }
+
+    root.position.set(x, groundY + terrainYOffset, z)
+    this._ctx.scene.add(root)
+    if (this._playEnterCancelled) {
+      EditorSceneModule._disposePlayCharacterResources(root)
+      this._ctx.scene.remove(root)
+      return
+    }
+    this._avatarRoot = root
+
+    this._player = new PlayerController({
+      characterSpeed: 7,
+      facingLerp: 12,
+      terrainYOffset,
+      movementBasis: this._orbitLocomotionActive() ? 'camera' : 'facing',
+    })
+    this._player.setTerrainFootprintRadius(footprint)
+    const crouchDelta = ch.modelUrl?.trim() ? DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA : 0
+    this._player.setCrouchTerrainYOffsetDelta(crouchDelta)
+    this._player.resetFacing(ch.rotationY ?? 0)
+
+    if (this._playEnterCancelled) {
+      this._disposeSessionAvatar()
+      return
+    }
+
+    this._animRig?.dispose()
+    this._animRig = new CharacterAnimationRig(root)
+  }
+
+  /** Leave walk camera + gameplay rig; keep session avatar in scene. */
+  private _clearWalkModeOnly(): void {
+    this._gameplayCam = null
+  }
+
+  private _disposeSessionAvatar(): void {
+    this._clearWalkModeOnly()
+    this._animRig?.dispose()
+    this._animRig = null
+    if (this._avatarRoot) {
+      EditorSceneModule._disposePlayCharacterResources(this._avatarRoot)
+      this._ctx.scene.remove(this._avatarRoot)
+      this._avatarRoot = null
+    }
+    this._player = null
+  }
+
+  private static _disposePlayCharacterResources(root: THREE.Object3D): void {
+    root.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry?.dispose()
+        const m = o.material
+        if (Array.isArray(m)) {
+          for (const mm of m) mm.dispose()
+        } else {
+          m?.dispose()
+        }
+      }
+    })
+  }
+
+  private _playTick(delta: number): void {
+    if (!this._player || !this._avatarRoot || !this._gameplayCam) return
+
+    const sprintHeld = this._locoSprintOr
+    const crouchHeld = this._locoCrouchOr
+    const jogHeld = this._locoJogOr
+    this._locoSprintOr = false
+    this._locoCrouchOr = false
+    this._locoJogOr = false
+
+    this._player.tick(delta, {
+      camera: this._ctx.camera,
+      character: this._avatarRoot,
+      sampler: this._sampler,
+      playableRadius: this._terrainRadius,
+      sprintHeld,
+      crouchHeld,
+    })
+
+    const snap = this._player.getSnapshot()
+    this._animRig?.update(delta, this._avatarRoot, snap.velocity, {
+      crouch: snap.crouching,
+      sprint: snap.sprinting,
+      grounded: snap.grounded,
+      jog: jogHeld,
+    })
+
+    this._gameplayCam.update(
+      this._ctx.camera,
+      delta,
+      this._avatarRoot,
+      this._player.getFacing(),
+      this._player.getCrouchGroundBlend(),
+    )
+  }
+
+  /**
+   * Move orbit pivot + camera by the same delta so OrbitControls spherical offset is unchanged
+   * (mouse still drives rotation/zoom; WASD only slides the rig with the character).
+   */
+  private _panOrbitRigByAvatarDelta(): void {
+    if (!this._avatarRoot) return
+    this._orbitFollowDelta.subVectors(this._avatarRoot.position, this._orbitFollowPrev)
+    if (this._orbitFollowDelta.lengthSq() < 1e-16) return
+    this.orbit.target.add(this._orbitFollowDelta)
+    this._ctx.camera.position.add(this._orbitFollowDelta)
+  }
+
+  /** Snap orbit target to the session avatar while preserving camera–target offset (bookmark → follow). */
+  private _panOrbitRigToSessionAvatar(): void {
+    if (!this._avatarRoot) return
+    this._orbitFollowDelta.set(
+      this._avatarRoot.position.x - this.orbit.target.x,
+      this._avatarRoot.position.y - this.orbit.target.y,
+      this._avatarRoot.position.z - this.orbit.target.z,
+    )
+    if (this._orbitFollowDelta.lengthSq() < 1e-16) return
+    this.orbit.target.add(this._orbitFollowDelta)
+    this._ctx.camera.position.add(this._orbitFollowDelta)
+    this.orbit.update()
+  }
+
+  private _editOrbitLocomotionTick(delta: number): void {
+    if (!this._orbitLocomotionActive()) return
+    if (!this._player || !this._avatarRoot) return
+
+    const sprintHeld = this._locoSprintOr
+    const crouchHeld = this._locoCrouchOr
+    const jogHeld = this._locoJogOr
+    this._locoSprintOr = false
+    this._locoCrouchOr = false
+    this._locoJogOr = false
+
+    this._orbitFollowPrev.copy(this._avatarRoot.position)
+    this._player.tick(delta, {
+      camera: this._ctx.camera,
+      character: this._avatarRoot,
+      sampler: this._sampler,
+      playableRadius: this._terrainRadius,
+      sprintHeld,
+      crouchHeld,
+    })
+    this._panOrbitRigByAvatarDelta()
+
+    const snap = this._player.getSnapshot()
+    this._animRig?.update(delta, this._avatarRoot, snap.velocity, {
+      crouch: snap.crouching,
+      sprint: snap.sprinting,
+      grounded: snap.grounded,
+      jog: jogHeld,
+    })
+
+    this._walkSpawnX = this._avatarRoot.position.x
+    this._walkSpawnZ = this._avatarRoot.position.z
+    this._refreshSpawnMarkerPosition()
   }
 }

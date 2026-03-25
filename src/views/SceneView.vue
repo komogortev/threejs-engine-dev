@@ -4,10 +4,11 @@ import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { InputModule } from '@base/input'
 import {
-  ThirdPersonSceneModule,
   THIRD_PERSON_CAMERA_PRESET_ORDER,
+  type GameplayCameraMode,
   type ThirdPersonCameraPreset,
-} from '@/modules/ThirdPersonSceneModule'
+} from '@base/camera-three'
+import { ThirdPersonSceneModule } from '@/modules/ThirdPersonSceneModule'
 import { scene01 } from '@/scenes/scene-01'
 import { useShellContext } from '@/composables/useShellContext'
 
@@ -23,16 +24,35 @@ const sceneModule = new ThirdPersonSceneModule({
 })
 
 const cameraPresetLabel = ref<ThirdPersonCameraPreset>(sceneModule.getCameraPreset())
+const cameraModeLabel = ref<GameplayCameraMode>(sceneModule.getCameraMode())
+
 let presetIndex = Math.max(0, THIRD_PERSON_CAMERA_PRESET_ORDER.indexOf(cameraPresetLabel.value))
 
 function cycleCamera(delta: number): void {
+  if (sceneModule.getCameraMode() !== 'third-person') return
   presetIndex = (presetIndex + delta + THIRD_PERSON_CAMERA_PRESET_ORDER.length) % THIRD_PERSON_CAMERA_PRESET_ORDER.length
   const p = THIRD_PERSON_CAMERA_PRESET_ORDER[presetIndex]!
   sceneModule.setCameraPreset(p)
   cameraPresetLabel.value = p
 }
 
+function toggleCameraMode(): void {
+  const next: GameplayCameraMode =
+    sceneModule.getCameraMode() === 'third-person' ? 'first-person' : 'third-person'
+  sceneModule.setCameraMode(next)
+  cameraModeLabel.value = next
+  if (next === 'third-person') {
+    presetIndex = Math.max(0, THIRD_PERSON_CAMERA_PRESET_ORDER.indexOf(sceneModule.getCameraPreset()))
+    cameraPresetLabel.value = sceneModule.getCameraPreset()
+  }
+}
+
 function onWindowKeyDown(e: KeyboardEvent): void {
+  if (e.code === 'Tab') {
+    e.preventDefault()
+    toggleCameraMode()
+    return
+  }
   if (e.code === 'BracketRight') {
     e.preventDefault()
     cycleCamera(1)
@@ -130,15 +150,18 @@ onUnmounted(async () => {
         <p class="text-white/30 text-[11px] tracking-widest uppercase text-center">
           move · Shift sprint · Ctrl crouch · Space jump (buffer)
         </p>
-        <p class="text-white/20 text-[10px] tracking-wider">[ ] cycle camera rig</p>
+        <p class="text-white/20 text-[10px] tracking-wider text-center">
+          Tab third / first person · [ ] cycle rig (third person)
+        </p>
       </div>
     </Transition>
 
-    <!-- Camera preset (always visible, small) -->
+    <!-- Camera mode + preset -->
     <div
-      class="absolute bottom-4 right-4 px-2 py-1 rounded-md bg-black/50 border border-white/10 text-[10px] font-mono text-white/50 uppercase tracking-wide"
+      class="absolute bottom-4 right-4 px-2 py-1 rounded-md bg-black/50 border border-white/10 text-[10px] font-mono text-white/50 uppercase tracking-wide max-w-[min(100vw-2rem,20rem)] text-right leading-relaxed"
     >
-      cam: {{ cameraPresetLabel }}
+      <div>mode: {{ cameraModeLabel === 'first-person' ? '1p' : '3p' }}</div>
+      <div v-if="cameraModeLabel === 'third-person'">rig: {{ cameraPresetLabel }}</div>
     </div>
   </div>
 </template>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
+import { DEFAULT_BINDINGS, InputModule } from '@base/input'
 import { useShellContext } from '@/composables/useShellContext'
 import { EditorSceneModule } from '@/editor/EditorSceneModule'
 import type { EditorState, EditorTool, EditorObject, GizmoMode, EnvironmentState } from '@/editor/EditorSceneModule'
@@ -41,8 +42,10 @@ const router    = useRouter()
 const context   = useShellContext()
 const container = ref<HTMLElement>()
 
-const engine = new ThreeModule()
-const editor = new EditorSceneModule(scene01)
+const engine      = new ThreeModule()
+/** Touch overlay would sit above the canvas and block OrbitControls mouse drags. */
+const inputModule = new InputModule(DEFAULT_BINDINGS, { enableTouchOverlay: false })
+const editor      = new EditorSceneModule(scene01)
 
 // ─── Reactive editor state ────────────────────────────────────────────────────
 
@@ -57,6 +60,8 @@ const state = ref<EditorState>({
   environment:         defaultEnvironmentState(),
   orbitBookmarkIndex:  0,
   orbitBookmarkLabel:  EDITOR_ORBIT_BOOKMARKS[0]!.label,
+  playSimulation:      false,
+  playCameraHud:       '',
 })
 
 const selected = computed<EditorObject | null>(() =>
@@ -140,6 +145,14 @@ function setOrbitBookmark(idx: number): void {
   editor.setOrbitBookmarkIndex(idx)
 }
 
+function focusEngineSurface(): void {
+  container.value?.focus()
+}
+
+function togglePlaySimulation(): void {
+  editor.setPlaySimulation(!state.value.playSimulation)
+}
+
 function objectIcon(obj: EditorObject): string {
   if (obj.type === 'gltf') return '📦'
   return PRIMITIVE_ICONS[obj.type as PrimitiveType] ?? '?'
@@ -162,10 +175,20 @@ function objectLabel(obj: EditorObject, idx: number): string {
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
+/** After Walk/Stop (or **P** / **Esc**), move focus off `<button>` so Space = jump, not button activate. */
+watch(
+  () => state.value.playSimulation,
+  async () => {
+    await nextTick()
+    focusEngineSurface()
+  },
+)
+
 onMounted(async () => {
   if (!container.value) return
   editor.onStateChanged = (s) => { state.value = s }
   await engine.mount(container.value, context)
+  await engine.mountChild('input', inputModule)
   await engine.mountChild('editor', editor)
   container.value.focus()
 })
@@ -179,8 +202,16 @@ onUnmounted(async () => {
 <template>
   <div class="relative w-screen h-screen bg-black overflow-hidden select-none">
 
-    <!-- Three.js canvas (focusable so editor shortcuts don’t hit focused menu buttons from last route) -->
-    <div ref="container" class="absolute inset-0 outline-none" tabindex="0" />
+    <!--
+      Focusable surface: pull focus from toolbar/sidebar on pointer down so Space does not
+      activate a focused <button> (e.g. jump vs toggling Walk scene).
+    -->
+    <div
+      ref="container"
+      class="absolute inset-0 outline-none"
+      tabindex="0"
+      @pointerdown="focusEngineSurface"
+    />
 
     <!-- ── Top toolbar ──────────────────────────────────────────────────────── -->
     <div class="absolute top-0 left-0 right-64 h-11 flex items-center gap-2 px-4
@@ -197,6 +228,7 @@ onUnmounted(async () => {
         :key="bm.id"
         :class="['orbit-btn', state.orbitBookmarkIndex === i ? 'orbit-active' : 'orbit-idle']"
         type="button"
+        :disabled="state.playSimulation"
         @click="setOrbitBookmark(i)"
       >
         {{ bm.label }}
@@ -204,8 +236,23 @@ onUnmounted(async () => {
 
       <div class="w-px h-5 bg-white/10" />
 
+      <button
+        type="button"
+        :class="[
+          'px-3 py-1 rounded text-xs font-semibold transition-colors',
+          state.playSimulation
+            ? 'bg-rose-700/90 text-white ring-1 ring-rose-400/60'
+            : 'bg-emerald-900/60 text-emerald-200 hover:bg-emerald-800/80 hover:text-white',
+        ]"
+        @click="togglePlaySimulation"
+      >
+        {{ state.playSimulation ? 'Stop walk' : 'Walk scene' }}
+      </button>
+
+      <div class="w-px h-5 bg-white/10" />
+
       <!-- Gizmo mode (only when something is selected) -->
-      <template v-if="state.selectedIndex !== null">
+      <template v-if="state.selectedIndex !== null && !state.playSimulation">
         <button
           v-for="m in (['translate', 'rotate', 'scale'] as GizmoMode[])"
           :key="m"
@@ -686,12 +733,27 @@ onUnmounted(async () => {
 
     <!-- ── Hints ─────────────────────────────────────────────────────────────── -->
     <div class="absolute bottom-4 left-4 space-y-1 pointer-events-none max-w-md">
-      <p class="hint">
-        View: <span class="text-white/35">[</span> / <span class="text-white/35">]</span> cycle ·
-        buttons in toolbar · {{ state.orbitBookmarkLabel }}
-      </p>
-      <p class="hint">Orbit: left-drag · Zoom: scroll · Right-click terrain: set orbit anchor</p>
-      <p class="hint">T = move · R = rotate · S = scale · Esc = deselect · Del = delete</p>
+      <template v-if="state.playSimulation">
+        <p class="hint text-emerald-400/90">
+          Walk: WASD · Shift sprint · C crouch · Space jump · cam {{ state.playCameraHud }}
+        </p>
+        <p class="hint">
+          <span class="text-white/35">[</span> / <span class="text-white/35">]</span> rig ·
+          <span class="text-white/35">B</span> 3p/1p · <span class="text-white/35">Esc</span> stop
+        </p>
+      </template>
+      <template v-else>
+        <p class="hint">
+          <span class="text-white/35">P</span> walk scene · View
+          <span class="text-white/35">[</span> / <span class="text-white/35">]</span> · {{ state.orbitBookmarkLabel }}
+        </p>
+        <p class="hint">Orbit: left-drag · Zoom: scroll · Right-click terrain: set orbit anchor</p>
+        <p class="hint">
+          Green ring = session spawn · <strong class="text-white/50">Author</strong> /
+          <strong class="text-white/50">Bird-eye</strong>: WASD moves avatar (camera-relative); mouse still orbits
+        </p>
+        <p class="hint">T = move · R = rotate · S = scale · Esc = deselect · Del = delete</p>
+      </template>
     </div>
   </div>
 </template>
@@ -719,6 +781,7 @@ onUnmounted(async () => {
 }
 .orbit-active { @apply bg-teal-700/80 text-teal-50; }
 .orbit-idle   { @apply text-white/40 hover:bg-white/10 hover:text-white/80; }
+.orbit-btn:disabled { @apply opacity-30 cursor-not-allowed pointer-events-none; }
 
 .hint {
   @apply text-white/20 text-[10px] font-mono tracking-wider;
