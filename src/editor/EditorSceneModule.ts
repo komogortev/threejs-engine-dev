@@ -314,9 +314,10 @@ export class EditorSceneModule extends BaseModule {
     this._applyOrbitBookmark(0, false)
 
     // ── TransformControls ────────────────────────────────────────────────────
+    // r170+: TransformControls extends Controls, not Object3D — add getHelper() to the scene.
     this.transform = new TransformControls(ctx.camera, ctx.renderer.domElement)
     this.transform.setMode('translate')
-    ctx.scene.add(this.transform as unknown as THREE.Object3D)
+    ctx.scene.add(this.transform.getHelper())
 
     this.transform.addEventListener('dragging-changed', (e) => {
       this.orbit.enabled = !(e as unknown as { value: boolean }).value
@@ -405,6 +406,7 @@ export class EditorSceneModule extends BaseModule {
       this._spawnMarker = null
     }
     this.orbit.dispose()
+    this._ctx.scene.remove(this.transform.getHelper())
     this.transform.dispose()
     this._unregisterLoop?.()
   }
