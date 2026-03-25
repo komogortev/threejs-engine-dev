@@ -25,6 +25,7 @@ import {
   sanitizeMixamoClips,
 } from '@base/player-three'
 import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
+import { resolvePublicUrl } from '@/utils/resolvePublicUrl'
 
 export interface SceneBuilderResult {
   sampler: TerrainSampler
@@ -292,13 +293,14 @@ export class SceneBuilder {
     ctx: ThreeContext,
     url: string,
   ): Promise<{ rootScene: THREE.Object3D; animations: THREE.AnimationClip[] }> {
+    const resolved = resolvePublicUrl(url)
     if (SceneBuilder.isFbxUrl(url)) {
-      const r = await ctx.assets.loadFBX(url)
+      const r = await ctx.assets.loadFBX(resolved)
       const animations = [...r.animations]
       SceneBuilder.labelClipsFromSourceUrl(url, animations)
       return { rootScene: r.group, animations }
     }
-    const gltf = await ctx.assets.loadGLTF(url)
+    const gltf = await ctx.assets.loadGLTF(resolved)
     return { rootScene: gltf.scene, animations: [...gltf.animations] }
   }
 
@@ -590,7 +592,7 @@ export class SceneBuilder {
     const scale = obj.scale ?? 1
 
     try {
-      const gltf  = await ctx.assets.loadGLTF(obj.url)
+      const gltf  = await ctx.assets.loadGLTF(resolvePublicUrl(obj.url))
       const model = gltf.scene.clone(true)
       model.scale.setScalar(scale)
       model.rotation.y  = obj.rotationY ?? 0
