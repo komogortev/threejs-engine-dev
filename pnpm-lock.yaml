@@ -23,6 +23,9 @@ importers:
       '@base/player-three':
         specifier: link:../SHARED/packages/player-three
         version: link:../SHARED/packages/player-three
+      '@base/scene-builder':
+        specifier: link:../SHARED/packages/scene-builder
+        version: link:../SHARED/packages/scene-builder
       '@base/threejs-engine':
         specifier: link:../SHARED/packages/threejs-engine
         version: link:../SHARED/packages/threejs-engine

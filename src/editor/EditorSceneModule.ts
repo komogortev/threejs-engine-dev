@@ -16,19 +16,22 @@ import {
   PLAYER_CAPSULE_HALF_HEIGHT,
   sampleTerrainFootprintY,
 } from '@base/player-three'
-import { EnvironmentRuntime, type EnvironmentState } from '@/scene/EnvironmentRuntime'
-import { SceneBuilder } from '@/scene/SceneBuilder'
-import { PrimitiveFactory, PRIMITIVE_BASE_OFFSETS } from '@/scene/PrimitiveFactory'
-import type { TerrainSampler } from '@/scene/TerrainSampler'
-import type {
-  SceneDescriptor,
-  PlacedObject,
-  GltfObject,
-  PrimitiveType,
-  ScatterField,
-  AtmosphereDescriptor,
-} from '@/scene/SceneDescriptor'
-import { convertUnlitToPbrRough } from '@/scene/gltfMaterialUtils'
+import {
+  convertUnlitToPbrRough,
+  EnvironmentRuntime,
+  PrimitiveFactory,
+  PRIMITIVE_BASE_OFFSETS,
+  SceneBuilder,
+  type AtmosphereDescriptor,
+  type EnvironmentState,
+  type GltfObject,
+  type PlacedObject,
+  type PrimitiveType,
+  type SceneDescriptor,
+  type ScatterField,
+  type TerrainSampler,
+} from '@base/scene-builder'
+import { createSceneBuildOptions } from '@/utils/sceneBuildOptions'
 import {
   EDITOR_ORBIT_BOOKMARKS,
   EDITOR_ORBIT_LOCOMOTION_IDS,
@@ -284,7 +287,7 @@ export class EditorSceneModule extends BaseModule {
       objects: scatterItems,
       skipPlayerCharacter: true,
     }
-    const result      = await SceneBuilder.build(ctx, buildDesc)
+    const result      = await SceneBuilder.build(ctx, buildDesc, createSceneBuildOptions())
     this.terrainMesh  = result.terrainMesh
     this._sampler     = result.sampler
     this._scatterRoot = result.scatterRoot
@@ -1254,7 +1257,7 @@ export class EditorSceneModule extends BaseModule {
     let terrainYOffset: number
 
     if (ch.modelUrl?.trim()) {
-      const built = await SceneBuilder.buildCharacter(this._ctx, ch)
+      const built = await SceneBuilder.buildCharacter(this._ctx, ch, createSceneBuildOptions())
       if (this._playEnterCancelled) {
         EditorSceneModule._disposePlayCharacterResources(built.object)
         return

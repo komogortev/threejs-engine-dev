@@ -15,10 +15,13 @@ import {
   PlayerController,
   PLAYER_CAPSULE_HALF_HEIGHT,
 } from '@base/player-three'
-import { SceneBuilder } from '@/scene/SceneBuilder'
-import { EnvironmentRuntime } from '@/scene/EnvironmentRuntime'
-import type { SceneDescriptor } from '@/scene/SceneDescriptor'
-import type { TerrainSampler } from '@/scene/TerrainSampler'
+import {
+  EnvironmentRuntime,
+  SceneBuilder,
+  type SceneDescriptor,
+  type TerrainSampler,
+} from '@base/scene-builder'
+import { createSceneBuildOptions } from '@/utils/sceneBuildOptions'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -210,7 +213,7 @@ export class ThirdPersonSceneModule extends BaseModule {
     const ctx = context as ThreeContext
 
     if (this.descriptor) {
-      const result = await SceneBuilder.build(ctx, this.descriptor)
+      const result = await SceneBuilder.build(ctx, this.descriptor, createSceneBuildOptions())
       if (!result.character || result.characterTerrainYOffset === undefined) {
         throw new Error(
           'ThirdPersonSceneModule: SceneBuilder returned no character — remove skipPlayerCharacter from the descriptor.',

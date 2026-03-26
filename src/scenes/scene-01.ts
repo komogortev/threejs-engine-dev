@@ -1,4 +1,4 @@
-import type { SceneDescriptor } from '@/scene/SceneDescriptor'
+import type { SceneDescriptor } from '@base/scene-builder'
 import { MIXAMO_FBX_CLIP_URLS } from '@/scenes/mixamoFbxClipUrls'
 
 /** Mixamo Remy (skin) — path must be `encodeURI` if it contains spaces. */

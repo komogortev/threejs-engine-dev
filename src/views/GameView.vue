@@ -93,12 +93,26 @@ function playBeep(): void {
     <div ref="container" class="absolute inset-0" />
 
     <!-- Top bar -->
-    <div class="absolute top-4 left-4 flex items-center gap-3">
+    <div class="absolute top-4 left-4 flex flex-wrap items-center gap-3">
       <button
         class="flex items-center gap-2 px-4 py-2 bg-black/50 hover:bg-black/70 text-white text-xs font-medium rounded-lg backdrop-blur-sm border border-white/10 transition-colors"
         @click="router.push('/')"
       >
         ← Menu
+      </button>
+      <button
+        class="px-3 py-2 bg-indigo-600/60 hover:bg-indigo-500/70 text-indigo-100 text-[10px] font-semibold rounded-lg backdrop-blur-sm border border-indigo-400/20 transition-colors"
+        type="button"
+        @click="router.push('/scene')"
+      >
+        Scene
+      </button>
+      <button
+        class="px-3 py-2 bg-violet-700/60 hover:bg-violet-600/70 text-violet-100 text-[10px] font-semibold rounded-lg backdrop-blur-sm border border-violet-400/20 transition-colors"
+        type="button"
+        @click="router.push('/editor')"
+      >
+        Editor
       </button>
       <span class="px-3 py-1.5 bg-indigo-600/70 text-indigo-100 text-xs font-mono rounded-lg backdrop-blur-sm">
         threejs-engine-dev · Phase 3

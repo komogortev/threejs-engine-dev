@@ -4,7 +4,7 @@ import type {
   GltfObject,
   ScatterField,
   AtmosphereDescriptor,
-} from '@/scene/SceneDescriptor'
+} from '@base/scene-builder'
 
 export type EditorObject = PlacedObject | GltfObject
 
@@ -86,7 +86,7 @@ export function serializeDescriptor(
   // Must match imports in SceneView / EditorView (`scene01` from @/scenes/scene-01).
   // If you paste into another file (e.g. scene-02.ts), rename the symbol to match.
   return [
-    `import type { SceneDescriptor } from '@/scene/SceneDescriptor'\n`,
+    `import type { SceneDescriptor } from '@base/scene-builder'\n`,
     `export const scene01: SceneDescriptor = ${tsLiteral(merged, 0)}`,
   ].join('\n')
 }
