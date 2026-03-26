@@ -998,13 +998,15 @@ export class EditorSceneModule extends BaseModule {
   private _createGhost(tool: EditorTool): void {
     if (tool === 'select') return
 
-    this._ghost = tool === 'gltf'
-      ? makeGltfGhost()
-      : PrimitiveFactory.build(tool as PrimitiveType, 1, Math.random)
+    const ghost =
+      tool === 'gltf'
+        ? makeGltfGhost()
+        : PrimitiveFactory.build(tool as PrimitiveType, 1, Math.random)
 
-    if (tool !== 'gltf') makeTransparent(this._ghost)
-    this._ghost.visible = false
-    this._ctx.scene.add(this._ghost)
+    if (tool !== 'gltf') makeTransparent(ghost)
+    ghost.visible = false
+    this._ctx.scene.add(ghost)
+    this._ghost = ghost
   }
 
   private _removeGhost(): void {

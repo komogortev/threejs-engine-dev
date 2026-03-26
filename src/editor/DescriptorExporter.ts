@@ -74,7 +74,7 @@ export function serializeDescriptor(
 ): string {
   const scatterFields =
     scatterFieldsOverride ??
-    ((base.objects ?? []).filter((o) => o.type === 'scatter') as ScatterField[])
+    (base.objects ?? []).filter((o): o is ScatterField => o.type === 'scatter')
   const allObjects = [...scatterFields, ...editorObjects]
 
   const merged: SceneDescriptor = {
