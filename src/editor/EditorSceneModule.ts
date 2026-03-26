@@ -1211,7 +1211,7 @@ export class EditorSceneModule extends BaseModule {
       mode: 'third-person',
       firstPerson:
         ch.modelUrl?.trim()
-          ? { eyeOffsetY: 0.75, crouchEyeDrop: 0.28 }
+          ? { eyeOffsetY: 0.78, crouchEyeDrop: 0.28, eyePullback: 0.072 }
           : undefined,
     })
 

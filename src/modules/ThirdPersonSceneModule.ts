@@ -51,6 +51,11 @@ export interface ThirdPersonSceneConfig {
   /** First-person: eye lowers by this × crouch blend. */
   firstPersonCrouchEyeDrop?: number
   /**
+   * First-person: nudge camera forward along body XZ (m), same axis as walk forward — see `@base/camera-three` `eyePullback`.
+   * @base/camera-three default is 0.
+   */
+  firstPersonEyePullback?: number
+  /**
    * World Y added to the grounded root while crouching (× smoothed crouch). Negative lowers skinned meshes so feet stay on terrain.
    * If omitted and the descriptor loads a `modelUrl`, {@link DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA} is applied automatically.
    */
@@ -125,6 +130,13 @@ export class ThirdPersonSceneModule extends BaseModule {
   private locoCrouchOr = false
   private locoJogOr = false
 
+  /** Merged per frame from `input:axis` `look` (pointer lock / gamepad). */
+  private lookYawAcc = 0
+  private lookPitchAcc = 0
+  /** First-person vertical aim (radians), passed to {@link GameplayCameraController}. */
+  private fpPitch = 0
+  private readonly fpPitchLimit = Math.PI / 2 - 0.15
+
   private readonly gameplayCam: GameplayCameraController
 
   constructor(
@@ -141,6 +153,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       cameraMode,
       firstPersonEyeOffsetY,
       firstPersonCrouchEyeDrop,
+      firstPersonEyePullback,
       ...configRest
     } = options
     this.cfg        = { ...DEFAULT_CONFIG, ...configRest }
@@ -152,9 +165,10 @@ export class ThirdPersonSceneModule extends BaseModule {
     if (cameraLateralOffset !== undefined) thirdPersonOverrides.lateral = cameraLateralOffset
     if (cameraPivotHeight !== undefined) thirdPersonOverrides.pivotY = cameraPivotHeight
 
-    const fp: { eyeOffsetY?: number; crouchEyeDrop?: number } = {}
+    const fp: { eyeOffsetY?: number; crouchEyeDrop?: number; eyePullback?: number } = {}
     if (firstPersonEyeOffsetY !== undefined) fp.eyeOffsetY = firstPersonEyeOffsetY
     if (firstPersonCrouchEyeDrop !== undefined) fp.crouchEyeDrop = firstPersonCrouchEyeDrop
+    if (firstPersonEyePullback !== undefined) fp.eyePullback = firstPersonEyePullback
 
     this.gameplayCam = new GameplayCameraController({
       cameraLerp: this.cfg.cameraLerp,
@@ -195,6 +209,17 @@ export class ThirdPersonSceneModule extends BaseModule {
   }
 
   setCameraMode(mode: GameplayCameraMode): void {
+    if (mode === 'third-person') {
+      if (typeof document !== 'undefined' && document.exitPointerLock) {
+        document.exitPointerLock()
+      }
+      this.fpPitch = 0
+      this.lookYawAcc = 0
+      this.lookPitchAcc = 0
+      this.player.setMovementBasis('facing')
+    } else {
+      this.player.setMovementBasis('camera')
+    }
     this.gameplayCam.setMode(mode)
     const ctx = this.context as ThreeContext | undefined
     if (ctx?.camera && this.character) {
@@ -245,6 +270,10 @@ export class ThirdPersonSceneModule extends BaseModule {
 
     this.initCamera(ctx.camera)
 
+    if (this.gameplayCam.getMode() === 'first-person') {
+      this.player.setMovementBasis('camera')
+    }
+
     this.offInputAxis = context.eventBus.on('input:axis', (raw) => {
       const e = raw as InputAxisEvent
       if (e.axis === 'move') {
@@ -254,6 +283,11 @@ export class ThirdPersonSceneModule extends BaseModule {
         this.locoSprintOr ||= e.value.x > 0.5
         this.locoCrouchOr ||= e.value.y > 0.5
         this.locoJogOr ||= (e.value.z ?? 0) > 0.5
+      }
+      if (e.axis === 'look') {
+        if (this.gameplayCam.getMode() !== 'first-person') return
+        this.lookYawAcc += e.value.x
+        this.lookPitchAcc += e.value.y
       }
     })
 
@@ -350,6 +384,19 @@ export class ThirdPersonSceneModule extends BaseModule {
     this.locoCrouchOr = false
     this.locoJogOr = false
 
+    if (this.gameplayCam.getMode() === 'first-person') {
+      if (this.lookYawAcc !== 0 || this.lookPitchAcc !== 0) {
+        this.player.addFacingDelta(this.lookYawAcc)
+        this.fpPitch = THREE.MathUtils.clamp(
+          this.fpPitch + this.lookPitchAcc,
+          -this.fpPitchLimit,
+          this.fpPitchLimit,
+        )
+        this.lookYawAcc = 0
+        this.lookPitchAcc = 0
+      }
+    }
+
     this.player.tick(delta, {
       camera: ctx.camera,
       character: this.character,
@@ -367,12 +414,14 @@ export class ThirdPersonSceneModule extends BaseModule {
       jog: jogHeld,
     })
 
+    const fpMode = this.gameplayCam.getMode() === 'first-person'
     this.gameplayCam.update(
       ctx.camera,
       delta,
       this.character,
       this.player.getFacing(),
       this.player.getCrouchGroundBlend(),
+      fpMode ? this.fpPitch : 0,
     )
   }
 }

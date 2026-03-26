@@ -17,7 +17,7 @@ const context = useShellContext()
 const container = ref<HTMLElement>()
 
 const engine      = new ThreeModule()
-const inputModule = new InputModule()
+const inputModule = new InputModule(undefined, { enablePointerLook: true })
 const sceneModule = new ThirdPersonSceneModule({
   descriptor: scene01,
   cameraPreset: 'close-follow',
@@ -149,6 +149,9 @@ onUnmounted(async () => {
         </div>
         <p class="text-white/30 text-[11px] tracking-widest uppercase text-center">
           move · Shift sprint · Ctrl crouch · Space jump (buffer)
+        </p>
+        <p class="text-white/20 text-[10px] tracking-wider text-center">
+          First person: click canvas to capture mouse · look around · Esc releases
         </p>
         <p class="text-white/20 text-[10px] tracking-wider text-center">
           Tab third / first person · [ ] cycle rig (third person)
