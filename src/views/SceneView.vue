@@ -8,7 +8,7 @@ import {
   type GameplayCameraMode,
   type ThirdPersonCameraPreset,
 } from '@base/camera-three'
-import { ThirdPersonSceneModule } from '@/modules/ThirdPersonSceneModule'
+import { ThirdPersonSceneModule } from '@/modules/GameplaySceneModule'
 import { scene01 } from '@/scenes/scene-01'
 import { useShellContext } from '@/composables/useShellContext'
 

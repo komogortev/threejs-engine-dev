@@ -1,7 +1,3 @@
-export {
-  ThirdPersonSceneModule,
-  type ThirdPersonSceneConfig,
-} from './GameplaySceneModule'
 import * as THREE from 'three'
 import { BaseModule } from '@base/engine-core'
 import type { EngineContext } from '@base/engine-core'
