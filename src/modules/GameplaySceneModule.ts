@@ -139,6 +139,8 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   private readonly gameplayCam: GameplayCameraController
   private edgeCatchAnimTrigger = false
+  private wallStumbleAnimTrigger = false
+  private failedJumpAnimTrigger = false
 
   constructor(
     options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {},
@@ -406,7 +408,10 @@ export class ThirdPersonSceneModule extends BaseModule {
       sprintHeld,
       crouchHeld,
     })
-    this.edgeCatchAnimTrigger = this.player.consumeEvents().some((e) => e.type === 'edge_catch')
+    const movementEvents = this.player.consumeEvents()
+    this.edgeCatchAnimTrigger = movementEvents.some((e) => e.type === 'edge_catch')
+    this.wallStumbleAnimTrigger = movementEvents.some((e) => e.type === 'wall_stumble')
+    this.failedJumpAnimTrigger = movementEvents.some((e) => e.type === 'jump_failed_high_ledge')
 
     const snap = this.player.getSnapshot()
     this.animRig?.update(delta, this.character, snap.velocity, {
@@ -415,8 +420,12 @@ export class ThirdPersonSceneModule extends BaseModule {
       grounded: snap.grounded,
       jog: jogHeld,
       edgeCatchTrigger: this.edgeCatchAnimTrigger,
+      wallStumbleTrigger: this.wallStumbleAnimTrigger,
+      failedJumpTrigger: this.failedJumpAnimTrigger,
     })
     this.edgeCatchAnimTrigger = false
+    this.wallStumbleAnimTrigger = false
+    this.failedJumpAnimTrigger = false
 
     const fpMode = this.gameplayCam.getMode() === 'first-person'
     this.gameplayCam.update(
