@@ -1,5 +1,5 @@
 import type { SceneDescriptor } from '@base/scene-builder'
-import { MIXAMO_FBX_CLIP_URLS } from '@/scenes/mixamoFbxClipUrls'
+import { MIXAMO_FBX_CLIP_URLS } from '@base/player-three'
 
 /** Mixamo Remy (skin) — path must be `encodeURI` if it contains spaces. */
 export const MIXAMO_REMY_FBX = encodeURI('/Remy.fbx')

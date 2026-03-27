@@ -138,6 +138,7 @@ export class ThirdPersonSceneModule extends BaseModule {
   private readonly fpPitchLimit = Math.PI / 2 - 0.15
 
   private readonly gameplayCam: GameplayCameraController
+  private edgeCatchAnimTrigger = false
 
   constructor(
     options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {},
@@ -405,6 +406,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       sprintHeld,
       crouchHeld,
     })
+    this.edgeCatchAnimTrigger = this.player.consumeEvents().some((e) => e.type === 'edge_catch')
 
     const snap = this.player.getSnapshot()
     this.animRig?.update(delta, this.character, snap.velocity, {
@@ -412,7 +414,9 @@ export class ThirdPersonSceneModule extends BaseModule {
       sprint: snap.sprinting,
       grounded: snap.grounded,
       jog: jogHeld,
+      edgeCatchTrigger: this.edgeCatchAnimTrigger,
     })
+    this.edgeCatchAnimTrigger = false
 
     const fpMode = this.gameplayCam.getMode() === 'first-person'
     this.gameplayCam.update(
