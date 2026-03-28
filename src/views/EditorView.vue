@@ -218,6 +218,7 @@ onUnmounted(async () => {
                 bg-black/60 backdrop-blur-sm border-b border-white/10">
 
       <button class="nav-btn" @click="router.push('/')">← Menu</button>
+      <button class="nav-btn" @click="router.push('/sandbox')">Sandbox</button>
 
       <div class="w-px h-5 bg-white/10" />
 

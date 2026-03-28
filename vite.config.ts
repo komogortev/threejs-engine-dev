@@ -67,6 +67,13 @@ export default defineConfig(({ mode }) => {
       dedupe: ['three'],
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        /**
+         * Force Vite to load @base/player-three from TypeScript source rather than compiled
+         * dist/. Required so Vite transforms `import.meta.glob` in mixamoFbxClipUrls.ts —
+         * the glob is expanded relative to the source file's location, giving correct
+         * `@fs/` URLs for the package's `assets/` directory.
+         */
+        '@base/player-three': resolve(sharedRoot, 'packages/player-three/src/index.ts'),
       },
     },
     optimizeDeps: {
