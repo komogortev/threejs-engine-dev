@@ -34,6 +34,9 @@ const disablePwa =
 
 export default defineConfig(({ mode }) => {
   const base = viteBase()
+  /** App root (threejs-engine-dev/). Linked `@base/*` packages resolve under ../SHARED. */
+  const appRoot = fileURLToPath(new URL('.', import.meta.url))
+  const sharedRoot = resolve(appRoot, '../SHARED')
 
   return {
     base,
@@ -76,8 +79,14 @@ export default defineConfig(({ mode }) => {
         '@base/player-three': resolve(sharedRoot, 'packages/player-three/src/index.ts'),
       },
     },
+    server: {
+      fs: {
+        allow: [appRoot, sharedRoot],
+      },
+    },
     optimizeDeps: {
       include: ['three', '@base/threejs-engine'],
+      exclude: ['@base/player-three'],
     },
   }
 })
