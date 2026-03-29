@@ -15,7 +15,7 @@ const engine      = new ThreeModule()
 const inputModule = new InputModule(undefined, { enablePointerLook: true })
 const sceneModule = new SandboxSceneModule({
   descriptor: sandboxScene,
-  cameraPreset: 'follow',
+  cameraPreset: 'close-follow',
 })
 
 // ── Time control state ─────────────────────────────────────────────────────
