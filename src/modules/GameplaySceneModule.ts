@@ -24,6 +24,7 @@ import {
 } from '@base/scene-builder'
 import { MeshTerrainSampler } from '@/utils/MeshTerrainSampler'
 import { createSceneBuildOptions } from '@/utils/sceneBuildOptions'
+import { resolvePublicUrl } from '@/utils/resolvePublicUrl'
 
 /** EventBus keys emitted by this module. Listen on the shell EventBus to react. */
 const EV_REQUEST_SCENE_CHANGE = 'game:request-scene-change' as const
@@ -448,7 +449,7 @@ export class GameplaySceneModule extends BaseModule {
 
       if (this.cfg.navigationMesh) {
         const nav = this.cfg.navigationMesh
-        const gltf = await ctx.assets.loadGLTF(nav.url)
+        const gltf = await ctx.assets.loadGLTF(resolvePublicUrl(nav.url))
         const navRoot = gltf.scene
         navRoot.position.set(nav.x ?? 0, nav.y ?? 0, nav.z ?? 0)
         navRoot.scale.setScalar(nav.scale ?? 1)
