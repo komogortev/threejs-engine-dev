@@ -14,18 +14,24 @@ import {
   DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA,
   PlayerController,
   PLAYER_CAPSULE_HALF_HEIGHT,
+  type PlayerControllerEvent,
+  type TerrainSurfaceSampler,
 } from '@base/player-three'
 import {
   EnvironmentRuntime,
   SceneBuilder,
   type SceneDescriptor,
-  type TerrainSampler,
 } from '@base/scene-builder'
+import { MeshTerrainSampler } from '@/utils/MeshTerrainSampler'
 import { createSceneBuildOptions } from '@/utils/sceneBuildOptions'
+
+/** EventBus keys emitted by this module. Listen on the shell EventBus to react. */
+const EV_REQUEST_SCENE_CHANGE = 'game:request-scene-change' as const
+const EV_REPORT_OUTCOME       = 'game:report-outcome'       as const
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-export interface ThirdPersonSceneConfig {
+export interface GameplaySceneConfig {
   /** Used only when no descriptor is provided (flat default scene). */
   groundRadius: number
   groundColor: number
@@ -67,67 +73,109 @@ export interface ThirdPersonSceneConfig {
    */
   crouchTerrainYOffsetDelta?: number
   /**
-   * Log jump arc telemetry (peak height, fall distance, air time) to the console on landing.
-   * Passed through to {@link PlayerController} — useful for tuning jump feel in the sandbox.
+   * Steepest slope the character can walk up before movement is blocked as "wall".
+   * Default in PlayerController is 35° — works for gentle hills.
+   * Increase to 55–65° for scenes with steep navigable terrain (e.g. hillside ascent).
    */
-  debugJumpArc?: boolean
+  maxWalkableSlopeDeg?: number
   /**
-   * Log resolved animation clip names to the console when the CharacterAnimationRig initialises.
-   * Helps diagnose missing or mismatched Mixamo clip names.
+   * Drop threshold (metres) before the cliff-edge catch blocks walk/jog movement.
+   * Default is feetToHips × 2/3 ≈ 0.59m — suited for flat terrain with real cliff edges.
+   * For steep downhill: set to probeHorizon × tan(slopeDeg).
+   * At 55° slope with default probe multiplier: ~1.78 × tan(55°) ≈ 2.55m.
+   * Sprint always bypasses this check regardless of threshold.
    */
+  cliffDropCatchThreshold?: number
+  /** Log jump arc telemetry (peak, fall dist, air time) on landing. */
+  debugJumpArc?: boolean
+  /** Log resolved animation clip names on CharacterAnimationRig init. */
   debugClipResolution?: boolean
+  /**
+   * Navigation / collision mesh that replaces the procedural `TerrainSampler`.
+   * Load a GLB whose meshes represent the exact walkable surfaces (ground, roads, rooftops).
+   * The mesh is placed with the same transform as the visual GLB so physics aligns.
+   * The root is added to the scene invisible — physics only, no visual contribution.
+   */
+  navigationMesh?: {
+    url: string
+    x?: number
+    y?: number
+    z?: number
+    scale?: number
+    rotationY?: number
+    /** Set true temporarily to render the nav mesh as a wireframe overlay for alignment debugging. */
+    debugVisible?: boolean
+  }
+  /**
+   * Scene exit trigger zones. A glowing ring is placed at each zone; standing inside for
+   * `dwellSeconds` (default 1.2s) emits `game:request-scene-change` with the target scene id.
+   * Positions are world-space X/Z. Y is sampled from terrain at mount time.
+   */
+  exitZones?: Array<{
+    x: number
+    /** Explicit world Y for the ring. Overrides terrain sampling — use when the ring
+     *  sits on a steep slope or elevated surface where sampling gives a wrong value. */
+    y?: number
+    z: number
+    /** Trigger radius in metres. Default 2.5. */
+    radius?: number
+    targetSceneId: string
+    /** Ring colour (hex). Default amber 0xffdd44. */
+    ringColor?: number
+    /** Seconds the player must stand inside before transition fires. Default 1.2. */
+    dwellSeconds?: number
+  }>
+  /**
+   * Emissive sky orb — used for the dead sun in scene-01.
+   * Rendered as a solid sphere with MeshBasicMaterial (unlit, always visible through fog).
+   */
+  sunOrb?: {
+    x: number
+    y: number
+    z: number
+    /** Sphere radius. Default 12. */
+    radius?: number
+    /** Colour hex. Default amber 0xff8800. */
+    color?: number
+  }
+  /**
+   * Scene-local secret double-jump policy.
+   * Keep this feature scenario-owned here; shared packages expose only generic movement capability.
+   */
+  secretDoubleJump?: {
+    enabled: boolean
+    activationCenterX: number
+    activationCenterZ: number
+    activationRadius: number
+    requiredDirectionX: number
+    requiredDirectionZ: number
+    minDirectionDot: number
+    preFallVyThreshold: number
+    postFallGraceSeconds: number
+    slowmoScale: number
+    slowmoMaxSeconds: number
+  }
 }
 
 // ─── Fall time dilation ──────────────────────────────────────────────────────
 
 /**
- * Configuration for narrative fall time-dilation — slow-motion that activates
- * when the character falls within an authored zone.
- *
- * **Both** zone and direction conditions must pass for dilation to fire.
- * This lets you author a specific cliff edge moment ("walk south off this ledge")
- * without triggering everywhere a character can fall.
- *
- * @example
- * // Slow-mo only when falling south off the cliff at X=−20, Z=30
- * {
- *   zone: { type: 'circle', x: -20, z: 30, radius: 6 },
- *   facingAngle: Math.PI,   // character facing +Z (south)
- *   facingTolerance: Math.PI / 4,
- *   minFallSpeed: 4,
- *   dilationScale: 0.25,
- * }
+ * Configuration for narrative fall time-dilation.
+ * @see ThirdPersonSceneModule.setFallTimeDilation
  */
 export interface FallTimeDilationConfig {
-  /**
-   * XZ zone in which dilation can activate — tested at the moment the character
-   * leaves the ground (liftoff position).
-   *
-   * - `circle`: centre (x, z) + radius
-   * - `aabb`:   axis-aligned rectangle minX/maxX/minZ/maxZ
-   */
   zone:
     | { type: 'circle'; x: number; z: number; radius: number }
     | { type: 'aabb'; minX: number; maxX: number; minZ: number; maxZ: number }
-  /**
-   * Optional world-facing angle (radians, Three.js convention: 0 = +Z, CCW)
-   * the character must be facing (within `±facingTolerance`) at liftoff.
-   * When omitted, no facing constraint is applied.
-   */
+  /** Facing angle (rad, 0 = +Z) the character must be facing at liftoff. Omit to skip. */
   facingAngle?: number
-  /** Half-arc tolerance for the facing check (radians). Default **π/3** (60°). */
+  /** Half-arc facing tolerance (rad). Default **π/3**. */
   facingTolerance?: number
-  /**
-   * Minimum downward speed (m/s, positive value) before dilation activates.
-   * Prevents the effect from firing on tiny hops. Default **4**.
-   */
+  /** Minimum downward speed (m/s) before dilation activates. Default **4**. */
   minFallSpeed?: number
-  /** Simulation time scale while dilated. Default **0.25** (quarter speed). */
+  /** Time scale while dilated. Default **0.25**. */
   dilationScale?: number
-  /**
-   * Exponential-approach speed (s⁻¹) for blending into / out of dilation.
-   * Higher = snappier transition. Default **5**.
-   */
+  /** Exponential blend speed (s⁻¹). Default **5**. */
   blendSpeed?: number
 }
 
@@ -148,7 +196,7 @@ function facingMatches(cfg: FallTimeDilationConfig, facing: number): boolean {
   return diff <= tol
 }
 
-const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
+const DEFAULT_CONFIG: GameplaySceneConfig = {
   groundRadius: 50,
   groundColor: 0x0f172a,
   fogColor: 0x080810,
@@ -156,6 +204,19 @@ const DEFAULT_CONFIG: ThirdPersonSceneConfig = {
   cameraLerp: 8,
   facingLerp: 12,
   facingLerpThirdPerson: 5,
+  secretDoubleJump: {
+    enabled: false,
+    activationCenterX: 0,
+    activationCenterZ: 0,
+    activationRadius: 999,
+    requiredDirectionX: 1,
+    requiredDirectionZ: 0,
+    minDirectionDot: 0.75,
+    preFallVyThreshold: -0.18,
+    postFallGraceSeconds: 0.3,
+    slowmoScale: 0.35,
+    slowmoMaxSeconds: 1.5,
+  },
 }
 
 /**
@@ -180,7 +241,7 @@ function playerMovementDebugEnabled(): boolean {
 // ─── Module ──────────────────────────────────────────────────────────────────
 
 /**
- * ThirdPersonSceneModule — third-person character controller with an optional
+ * GameplaySceneModule — gameplay character controller with an optional
  * terrain descriptor for shaped environments.
  *
  * Locomotion state and rules live in {@link PlayerController}; this module wires
@@ -193,18 +254,17 @@ function playerMovementDebugEnabled(): boolean {
  * **Movement debug:** In Vite dev, movement logging is **on** by default (`console.log`,
  * `[PlayerController.move]`). Silence with `localStorage.debugPlayerMove = '0'`. Optional: `?debugMove=1`.
  */
-export class ThirdPersonSceneModule extends BaseModule {
+export class GameplaySceneModule extends BaseModule {
   readonly id = 'third-person-scene'
 
-  protected readonly cfg: ThirdPersonSceneConfig
+  protected readonly cfg: GameplaySceneConfig
   private readonly descriptor?: SceneDescriptor
 
   private readonly player: PlayerController
 
   private character!: THREE.Object3D
-  private sampler?: TerrainSampler
-  /** Allow subclasses (e.g. SandboxSceneModule) to inject a custom sampler after mount. */
-  protected setSampler(s: TerrainSampler | undefined): void { this.sampler = s }
+  private sampler?: TerrainSurfaceSampler
+  protected setSampler(s: TerrainSurfaceSampler | undefined): void { this.sampler = s }
   private effectiveRadius = 50
 
   private offInputAxis: (() => void) | null = null
@@ -217,7 +277,8 @@ export class ThirdPersonSceneModule extends BaseModule {
   /** Merged per frame from `input:axis` `locomotion` (keyboard + gamepad may both emit). */
   private locoSprintOr = false
   private locoCrouchOr = false
-  private locoJogOr = false
+  /** Set from `consumeEvents` `landed` for the next `CharacterAnimationRig.update` only. */
+  private pendingLandForRig: { fallDistance: number; airTimeSeconds: number } | null = null
 
   /** Merged per frame from `input:axis` `look` (pointer lock / gamepad). */
   private lookYawAcc = 0
@@ -227,28 +288,34 @@ export class ThirdPersonSceneModule extends BaseModule {
   private readonly fpPitchLimit = Math.PI / 2 - 0.15
 
   private readonly gameplayCam: GameplayCameraController
+  private jumpHeld = false
+  private secretWindowOpen = false
+  private secretWindowTimer = 0
+  private secretSecondJumpTriggered = false
+  private secretPendingWinOnLand = false
+  private secretConsumed = false
+  private slowmoRemainingSeconds = 0
+  private secondJumpAnimTrigger = false
   private edgeCatchAnimTrigger = false
   private wallStumbleAnimTrigger = false
   private failedJumpAnimTrigger = false
 
-  /** 0 = paused; 1 = real-time (default); other values slow / fast-forward. */
-  private _timeScale = 1.0
-  /** Pending single-frame advances when paused (each decrements by 1 after advancing). */
-  private _pendingStepFrames = 0
-  /** Fixed delta used when stepping a single frame (seconds; default 1/60). */
-  private _stepFrameDelta = 1 / 60
+  // ── Dev time control (sandbox) ────────────────────────────────────────────
+  private _devTimeScale = 1.0
+  private _devPendingFrames = 0
+  private _devStepDelta = 1 / 60
 
   // ── Fall time dilation ────────────────────────────────────────────────────
   private _dilation: FallTimeDilationConfig | null = null
-  /** Whether dilation is currently active (character is in qualifying fall). */
   private _dilationActive = false
-  /** Horizontal facing angle (rad) at the moment the character left the ground. */
-  private _dilationLiftoffFacing = 0
-  /** Smoothed effective time scale that blends toward the dilation target. */
   private _dilationCurrentScale = 1.0
 
+  // Exit zone dwell accumulators — one entry per exitZones[] index.
+  private _exitZoneDwell: number[] = []
+  private _exitTriggered = false
+
   constructor(
-    options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {},
+    options: Partial<GameplaySceneConfig> & { descriptor?: SceneDescriptor } = {},
   ) {
     super()
     const {
@@ -292,6 +359,10 @@ export class ThirdPersonSceneModule extends BaseModule {
       terrainYOffset: PLAYER_CAPSULE_HALF_HEIGHT,
       debugMovement: playerMovementDebugEnabled(),
       debugJumpArc: this.cfg.debugJumpArc,
+      maxWalkableSlopeDeg: this.cfg.maxWalkableSlopeDeg,
+      cliffDropCatchThreshold: this.cfg.cliffDropCatchThreshold,
+      extraJumps: 1,
+      canUseExtraJump: () => this.canUseSecretExtraJumpNow(),
     })
     if (import.meta.env.DEV && playerMovementDebugEnabled()) {
       console.log(
@@ -302,51 +373,6 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   getPlayerController(): PlayerController {
     return this.player
-  }
-
-  // ─── Time control ────────────────────────────────────────────────────────────
-
-  /**
-   * Set the simulation time scale.
-   * - `1.0` = real-time (default)
-   * - `0.0` = paused; use {@link stepOneFrame} to advance one frame at a time
-   * - `0.5` = half-speed slow-motion
-   */
-  setTimeScale(scale: number): void {
-    this._timeScale = Math.max(0, scale)
-  }
-
-  getTimeScale(): number {
-    return this._timeScale
-  }
-
-  /**
-   * Advance exactly one simulation frame while paused (`timeScale === 0`).
-   * Queues up; multiple calls before the next RAF fire accumulate.
-   * No-ops when `timeScale > 0` (simulation is already running).
-   */
-  stepOneFrame(): void {
-    this._pendingStepFrames++
-  }
-
-  /** Override the fixed delta (seconds) used for single-frame step. Default `1/60`. */
-  setStepFrameDelta(seconds: number): void {
-    this._stepFrameDelta = Math.max(1e-4, seconds)
-  }
-
-  // ─── Fall time dilation ────────────────────────────────────────────────────
-
-  /**
-   * Configure or clear the fall time-dilation zone.
-   * When set, the scene will automatically slow time when the player falls within
-   * the zone while facing the specified direction, and restore on landing.
-   */
-  setFallTimeDilation(config: FallTimeDilationConfig | null): void {
-    this._dilation = config
-    if (!config) {
-      this._dilationActive = false
-      this._dilationCurrentScale = 1.0
-    }
   }
 
   getCameraPreset(): ThirdPersonCameraPreset {
@@ -360,6 +386,11 @@ export class ThirdPersonSceneModule extends BaseModule {
 
   getCameraMode(): GameplayCameraMode {
     return this.gameplayCam.getMode()
+  }
+
+  /** Current player world position — useful for tuning exit zone coordinates in dev. */
+  getPlayerPosition(): THREE.Vector3 {
+    return this.character.position.clone()
   }
 
   setCameraMode(mode: GameplayCameraMode): void {
@@ -395,7 +426,7 @@ export class ThirdPersonSceneModule extends BaseModule {
       const result = await SceneBuilder.build(ctx, this.descriptor, createSceneBuildOptions())
       if (!result.character || result.characterTerrainYOffset === undefined) {
         throw new Error(
-          'ThirdPersonSceneModule: SceneBuilder returned no character — remove skipPlayerCharacter from the descriptor.',
+          'GameplaySceneModule: SceneBuilder returned no character — remove skipPlayerCharacter from the descriptor.',
         )
       }
       this.character       = result.character
@@ -413,17 +444,67 @@ export class ThirdPersonSceneModule extends BaseModule {
             ? DEFAULT_SKINNED_CROUCH_TERRAIN_Y_DELTA
             : 0
       this.player.setCrouchTerrainYOffsetDelta(crouchY)
-      // Wire swimmable volumes or fallback global sea level for water physics.
-      const vols = this.descriptor?.swimmableVolumes
-      if (vols && vols.length > 0) {
-        this.player.setSwimmableVolumes(vols)
-      } else {
-        const seaLevel = this.descriptor?.terrain?.seaLevel
-        if (seaLevel !== undefined && seaLevel !== 0) {
-          this.player.setWaterSurfaceY(seaLevel)
+      this.environment      = EnvironmentRuntime.attachGame(ctx, this.descriptor.atmosphere ?? {})
+
+      if (this.cfg.navigationMesh) {
+        const nav = this.cfg.navigationMesh
+        const gltf = await ctx.assets.loadGLTF(nav.url)
+        const navRoot = gltf.scene
+        navRoot.position.set(nav.x ?? 0, nav.y ?? 0, nav.z ?? 0)
+        navRoot.scale.setScalar(nav.scale ?? 1)
+        navRoot.rotation.y = nav.rotationY ?? 0
+        if (nav.debugVisible) {
+          // Wireframe overlay so you can see nav mesh alignment against the visual GLB.
+          // Set debugVisible: false (or remove) once alignment is confirmed.
+          navRoot.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh
+              mesh.material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
+            }
+          })
+        } else {
+          // Hide root AND every child — GLTF nodes can carry their own visible flag
+          // from Blender which survives the parent-level toggle.
+          navRoot.traverse((child) => { child.visible = false })
+        }
+        ctx.scene.add(navRoot)
+        navRoot.updateMatrixWorld(true)
+        // Procedural sampler stays as fallback — covers steep hill faces where
+        // top-down raycasting misses. Mesh wins on flat/walkable surfaces.
+        this.sampler = MeshTerrainSampler.fromRoot(navRoot, this.sampler ?? null)
+      }
+
+      // ── Exit zone rings ────────────────────────────────────────────────────
+      if (this.cfg.exitZones?.length) {
+        this._exitZoneDwell = this.cfg.exitZones.map(() => 0)
+        for (const zone of this.cfg.exitZones) {
+          const r = zone.radius ?? 2.5
+          const groundY = zone.y ?? this.sampler?.sample(zone.x, zone.z) ?? 0
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(r * 0.55, r, 48),
+            new THREE.MeshBasicMaterial({
+              color: zone.ringColor ?? 0xffdd44,
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: 0.65,
+            }),
+          )
+          ring.rotation.x = -Math.PI / 2
+          ring.position.set(zone.x, groundY + 0.06, zone.z)
+          ctx.scene.add(ring)
         }
       }
-      this.environment      = EnvironmentRuntime.attachGame(ctx, this.descriptor.atmosphere ?? {})
+
+      // ── Dead sun / sky orb ─────────────────────────────────────────────────
+      if (this.cfg.sunOrb) {
+        const s = this.cfg.sunOrb
+        const orb = new THREE.Mesh(
+          new THREE.SphereGeometry(s.radius ?? 12, 32, 16),
+          new THREE.MeshBasicMaterial({ color: s.color ?? 0xff8800 }),
+        )
+        orb.position.set(s.x, s.y, s.z)
+        ctx.scene.add(orb)
+      }
     } else {
       this.effectiveRadius = this.cfg.groundRadius
       this.character = this.buildDefaultScene(ctx)
@@ -448,7 +529,6 @@ export class ThirdPersonSceneModule extends BaseModule {
       if (e.axis === 'locomotion') {
         this.locoSprintOr ||= e.value.x > 0.5
         this.locoCrouchOr ||= e.value.y > 0.5
-        this.locoJogOr ||= (e.value.z ?? 0) > 0.5
       }
       if (e.axis === 'look') {
         this.lookYawAcc += e.value.x
@@ -458,22 +538,29 @@ export class ThirdPersonSceneModule extends BaseModule {
 
     this.offInputAction = context.eventBus.on('input:action', (raw) => {
       const e = raw as InputActionEvent
-      if (e.action === 'jump' && e.type === 'pressed') {
+      if (e.action !== 'jump') return
+      if (e.type === 'pressed') {
+        this.jumpHeld = true
         this.player.notifyJumpPressed()
+      } else if (e.type === 'released') {
+        this.jumpHeld = false
+        if (this.secretSecondJumpTriggered) {
+          this.slowmoRemainingSeconds = 0
+        }
       }
     })
 
     this.unregisterSystem = ctx.registerSystem('third-person-scene', (rawDelta) => {
       let delta: number
-      if (this._timeScale === 0) {
-        if (this._pendingStepFrames > 0) {
-          this._pendingStepFrames--
-          delta = this._stepFrameDelta
+      if (this._devTimeScale === 0) {
+        if (this._devPendingFrames > 0) {
+          this._devPendingFrames--
+          delta = this._devStepDelta
         } else {
-          return  // paused, no step pending
+          return
         }
       } else {
-        delta = rawDelta * this._timeScale
+        delta = rawDelta * this._devTimeScale
       }
       this.environment?.update(delta)
       this.tick(delta, ctx)
@@ -553,12 +640,11 @@ export class ThirdPersonSceneModule extends BaseModule {
   // ─── Per-frame update ─────────────────────────────────────────────────────────
 
   private tick(delta: number, ctx: ThreeContext): void {
+    const simDelta = this.computeSimDelta(delta)
     const sprintHeld = this.locoSprintOr
     const crouchHeld = this.locoCrouchOr
-    const jogHeld = this.locoJogOr
     this.locoSprintOr = false
     this.locoCrouchOr = false
-    this.locoJogOr = false
 
     if (this.lookYawAcc !== 0 || this.lookPitchAcc !== 0) {
       if (this.gameplayCam.getMode() === 'first-person') {
@@ -572,7 +658,7 @@ export class ThirdPersonSceneModule extends BaseModule {
         // Third-person orbit: cap per-frame yaw to facingLerpThirdPerson rate so camera orbit
         // feels the same speed as the character naturally turns while walking.
         const tpRate = this.cfg.facingLerpThirdPerson ?? this.cfg.facingLerp
-        const maxYaw = tpRate * delta
+        const maxYaw = tpRate * simDelta
         this.player.addFacingDelta(Math.max(-maxYaw, Math.min(maxYaw, this.lookYawAcc)))
       }
       this.lookYawAcc = 0
@@ -580,7 +666,7 @@ export class ThirdPersonSceneModule extends BaseModule {
     }
 
     const isThirdPerson = this.gameplayCam.getMode() === 'third-person'
-    this.player.tick(delta, {
+    this.player.tick(simDelta, {
       camera: ctx.camera,
       character: this.character,
       sampler: this.sampler,
@@ -592,31 +678,36 @@ export class ThirdPersonSceneModule extends BaseModule {
       crouchHeld,
     })
     const movementEvents = this.player.consumeEvents()
-    this.edgeCatchAnimTrigger = movementEvents.some((e) => e.type === 'edge_catch')
-    this.wallStumbleAnimTrigger = movementEvents.some((e) => e.type === 'wall_stumble')
-    this.failedJumpAnimTrigger = movementEvents.some((e) => e.type === 'jump_failed_high_ledge')
+    this.handlePlayerEvents(movementEvents)
+
+    const land = this.pendingLandForRig
+    this.pendingLandForRig = null
 
     const snap = this.player.getSnapshot()
     this.tickFallDilation(snap, this.character)
 
-    this.animRig?.update(delta, this.character, snap.velocity, {
+    this.animRig?.update(simDelta, this.character, snap.velocity, {
       crouch: snap.crouching,
       sprint: snap.sprinting,
       grounded: snap.grounded,
-      jog: jogHeld,
+      landFallDistance: land?.fallDistance,
+      landAirTimeSeconds: land?.airTimeSeconds,
+      secondJumpTrigger: this.secondJumpAnimTrigger,
       edgeCatchTrigger: this.edgeCatchAnimTrigger,
       wallStumbleTrigger: this.wallStumbleAnimTrigger,
       failedJumpTrigger: this.failedJumpAnimTrigger,
-      waterMode: snap.waterMode,
     })
+    this.secondJumpAnimTrigger = false
     this.edgeCatchAnimTrigger = false
     this.wallStumbleAnimTrigger = false
     this.failedJumpAnimTrigger = false
+    this.updateSecretWindow(simDelta, snap.velocity.y)
+    this.tickExitZones(simDelta, ctx)
 
     const fpMode = this.gameplayCam.getMode() === 'first-person'
     this.gameplayCam.update(
       ctx.camera,
-      delta,
+      simDelta,
       this.character,
       this.player.getFacing(),
       this.player.getCrouchGroundBlend(),
@@ -624,7 +715,170 @@ export class ThirdPersonSceneModule extends BaseModule {
     )
   }
 
-  // ── Fall time dilation internal ────────────────────────────────────────────
+  private canUseSecretExtraJumpNow(): boolean {
+    return (
+      !!this.cfg.secretDoubleJump?.enabled &&
+      this.secretWindowOpen &&
+      !this.secretConsumed
+    )
+  }
+
+  private computeSimDelta(delta: number): number {
+    let d = delta
+    if (this.slowmoRemainingSeconds > 0) {
+      this.slowmoRemainingSeconds = Math.max(0, this.slowmoRemainingSeconds - delta)
+      d = delta * (this.cfg.secretDoubleJump?.slowmoScale ?? 0.35)
+    }
+    // Apply fall dilation (multiplicative; 1.0 when inactive).
+    return d * this._dilationCurrentScale
+  }
+
+  private tickExitZones(delta: number, ctx: ThreeContext): void {
+    if (this._exitTriggered || !this.cfg.exitZones?.length) return
+    const px = this.character.position.x
+    const pz = this.character.position.z
+    for (let i = 0; i < this.cfg.exitZones.length; i++) {
+      const zone = this.cfg.exitZones[i]!
+      const r = zone.radius ?? 2.5
+      const dx = px - zone.x
+      const dz = pz - zone.z
+      if (dx * dx + dz * dz <= r * r) {
+        const prev = this._exitZoneDwell[i] ?? 0
+        this._exitZoneDwell[i] = prev + delta
+        if (import.meta.env.DEV && prev === 0) {
+          console.log(`[ExitZone] entered zone ${i} → ${zone.targetSceneId} (x:${px.toFixed(1)} z:${pz.toFixed(1)})`)
+        }
+        if (this._exitZoneDwell[i]! >= (zone.dwellSeconds ?? 1.2)) {
+          this._exitTriggered = true
+          console.log(`[ExitZone] triggered → ${zone.targetSceneId}`)
+          ctx.eventBus.emit(EV_REQUEST_SCENE_CHANGE, { targetSceneId: zone.targetSceneId })
+        }
+      } else {
+        this._exitZoneDwell[i] = 0
+      }
+    }
+  }
+
+  private isInSecretActivationZone(): boolean {
+    const s = this.cfg.secretDoubleJump
+    if (!s?.enabled) return false
+    const dx = this.character.position.x - s.activationCenterX
+    const dz = this.character.position.z - s.activationCenterZ
+    return dx * dx + dz * dz <= s.activationRadius * s.activationRadius
+  }
+
+  private movementMatchesSecretDirection(velocity: { x: number; y: number; z: number }): boolean {
+    const s = this.cfg.secretDoubleJump
+    if (!s?.enabled) return false
+    const len = Math.hypot(velocity.x, velocity.z)
+    if (len < 1e-4) return false
+    const vx = velocity.x / len
+    const vz = velocity.z / len
+    const dirLen = Math.hypot(s.requiredDirectionX, s.requiredDirectionZ) || 1
+    const dx = s.requiredDirectionX / dirLen
+    const dz = s.requiredDirectionZ / dirLen
+    const dot = vx * dx + vz * dz
+    return dot >= s.minDirectionDot
+  }
+
+  private handlePlayerEvents(events: PlayerControllerEvent[]): void {
+    for (const event of events) {
+      if (event.type === 'jump_started') {
+        this.tryOpenSecretWindowFromTakeoff()
+        continue
+      }
+      if (event.type === 'extra_jump_used') {
+        if (this.secretWindowOpen && !this.secretConsumed) {
+          this.secretSecondJumpTriggered = true
+          this.secretPendingWinOnLand = true
+          this.secretConsumed = true
+          this.secondJumpAnimTrigger = true
+          this.secretWindowOpen = false
+          this.secretWindowTimer = 0
+          this.slowmoRemainingSeconds = this.cfg.secretDoubleJump?.slowmoMaxSeconds ?? 1.5
+        }
+        continue
+      }
+      if (event.type === 'edge_catch') {
+        this.edgeCatchAnimTrigger = true
+        continue
+      }
+      if (event.type === 'wall_stumble') {
+        this.wallStumbleAnimTrigger = true
+        continue
+      }
+      if (event.type === 'jump_failed_high_ledge') {
+        this.failedJumpAnimTrigger = true
+        continue
+      }
+      if (event.type === 'landed') {
+        this.pendingLandForRig = {
+          fallDistance: event.fallDistance,
+          airTimeSeconds: event.airTimeSeconds,
+        }
+        if (this.secretPendingWinOnLand) {
+          this.context.eventBus.emit(EV_REPORT_OUTCOME, {
+            kind: 'win',
+            reason: 'secret-double-jump-landing',
+          })
+          this.secretPendingWinOnLand = false
+          this.secretSecondJumpTriggered = false
+          this.slowmoRemainingSeconds = 0
+        }
+      }
+    }
+  }
+
+  private tryOpenSecretWindowFromTakeoff(): void {
+    const s = this.cfg.secretDoubleJump
+    if (!s?.enabled || this.secretConsumed) return
+    const snap = this.player.getSnapshot()
+    if (!this.isInSecretActivationZone()) return
+    if (!this.movementMatchesSecretDirection(snap.velocity)) return
+    this.secretWindowOpen = true
+    this.secretWindowTimer = s.postFallGraceSeconds
+    this.slowmoRemainingSeconds = s.slowmoMaxSeconds
+  }
+
+  private updateSecretWindow(delta: number, verticalVelocity: number): void {
+    const s = this.cfg.secretDoubleJump
+    if (!s?.enabled || !this.secretWindowOpen) return
+    if (verticalVelocity > s.preFallVyThreshold) return
+    this.secretWindowTimer = Math.max(0, this.secretWindowTimer - delta)
+    if (this.secretWindowTimer <= 0) {
+      this.secretWindowOpen = false
+      if (!this.secretSecondJumpTriggered) {
+        this.slowmoRemainingSeconds = 0
+      }
+    }
+    if (!this.isInSecretActivationZone()) {
+      this.secretWindowOpen = false
+      if (!this.secretSecondJumpTriggered) {
+        this.slowmoRemainingSeconds = 0
+      }
+    }
+  }
+
+  // ── Fall time dilation ───────────────────────────────────────────────────
+
+  /**
+   * Configure or clear the fall time-dilation zone.
+   * Pass `null` to disable and immediately restore real-time.
+   */
+  setFallTimeDilation(config: FallTimeDilationConfig | null): void {
+    this._dilation = config
+    if (!config) {
+      this._dilationActive = false
+      this._dilationCurrentScale = 1.0
+    }
+  }
+
+  // ── Dev time control (used by SandboxSceneModule / SandboxView) ──────────
+
+  setTimeScale(scale: number): void { this._devTimeScale = Math.max(0, scale) }
+  getTimeScale(): number { return this._devTimeScale }
+  stepOneFrame(): void { this._devPendingFrames++ }
+  setStepFrameDelta(seconds: number): void { this._devStepDelta = Math.max(1e-4, seconds) }
 
   private tickFallDilation(
     snap: ReturnType<PlayerController['getSnapshot']>,
@@ -633,38 +887,33 @@ export class ThirdPersonSceneModule extends BaseModule {
     const cfg = this._dilation
     if (!cfg) return
 
-    const minFallSpeed = cfg.minFallSpeed ?? 4
+    const minFallSpeed  = cfg.minFallSpeed ?? 4
     const dilationScale = cfg.dilationScale ?? 0.25
-    const blendSpeed   = cfg.blendSpeed ?? 5
+    const blendSpeed    = cfg.blendSpeed ?? 5
 
-    const isFalling = snap.mode === 'airborne' && snap.velocity.y < -minFallSpeed
+    const isFalling = !snap.grounded && snap.velocity.y < -minFallSpeed
 
     if (!this._dilationActive) {
-      // Check activation: must be airborne in zone with matching facing at liftoff.
       if (isFalling) {
         const { x, z } = character.position
-        const inZone = inDilationZone(cfg, x, z)
-        const facingOk = facingMatches(cfg, this.player.getFacing())
-        if (inZone && facingOk) {
+        if (inDilationZone(cfg, x, z) && facingMatches(cfg, this.player.getFacing())) {
           this._dilationActive = true
-          this._dilationLiftoffFacing = this.player.getFacing()
         }
       }
     } else {
-      // Deactivate on landing (or entering water — both exit airborne).
-      if (!isFalling && snap.mode !== 'airborne') {
+      if (!isFalling && snap.grounded) {
         this._dilationActive = false
       }
     }
 
-    // Smooth blend toward target scale (exponential approach, frame-rate independent).
     const targetScale = this._dilationActive ? dilationScale : 1.0
-    const k = 1 - Math.exp(-blendSpeed * (1 / 60))  // use fixed dt for stable k
+    const k = 1 - Math.exp(-blendSpeed * (1 / 60))
     this._dilationCurrentScale += (targetScale - this._dilationCurrentScale) * k
-
-    // Apply if meaningfully different from current manual timeScale (don't clobber pause).
-    if (this._timeScale !== 0) {
-      this._timeScale = this._dilationCurrentScale
-    }
   }
 }
+
+// ─── Backward-compat aliases ───────────────────────────────────────────────────
+// Engine-dev consumers used the old ThirdPersonSceneModule / ThirdPersonSceneConfig
+// names before the rename. Keep re-exports so existing views and sandbox compile.
+export { GameplaySceneModule as ThirdPersonSceneModule }
+export type { GameplaySceneConfig as ThirdPersonSceneConfig }
