@@ -8,15 +8,14 @@
   Persisted to localStorage under "waypoints:scene-01" across refreshes.
   Accessible in dev and production builds (no guard) since this harness
   is never deployed as a player-facing app.
+
+  Assets served from three-dreams/public via the gamePublicFallback vite plugin.
 -->
 <template>
   <div class="page-wrap">
     <WaypointEditorView
-      floor-glb-url="/scenes/scene-01/scene-floor.glb"
-      :context-glb-urls="[
-        '/scenes/scene-01/scene-walls.glb',
-        '/scenes/scene-01/scene-props.glb',
-      ]"
+      floor-glb-url="/scenes/scene-01/house_on_the_hill_mesh_ground.glb"
+      :context-glb-urls="['/scenes/scene-01/house_on_the_hill_4k.glb']"
       storage-key="waypoints:scene-01"
       export-name="ROAD_WAYPOINTS"
     />
