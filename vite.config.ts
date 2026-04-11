@@ -77,6 +77,11 @@ export default defineConfig(({ mode }) => {
          * `@fs/` URLs for the package's `assets/` directory.
          */
         '@base/player-three': resolve(sharedRoot, 'packages/player-three/src/index.ts'),
+        /**
+         * @base/ui ships Vue SFCs — resolve from source so Vite processes them
+         * with @vitejs/plugin-vue instead of loading a pre-built dist.
+         */
+        '@base/ui': resolve(sharedRoot, 'packages/ui/src/index.ts'),
       },
     },
     server: {
@@ -86,7 +91,7 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['three', '@base/threejs-engine'],
-      exclude: ['@base/player-three'],
+      exclude: ['@base/player-three', '@base/ui'],
     },
   }
 })

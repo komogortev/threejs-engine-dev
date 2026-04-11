@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base/audio": "link:../SHARED/packages/audio",
+    "@base/ui": "link:../SHARED/packages/ui",
     "@base/camera-three": "link:../SHARED/packages/camera-three",
     "@base/engine-core": "link:../SHARED/packages/engine-core",
     "@base/input": "link:../SHARED/packages/input",

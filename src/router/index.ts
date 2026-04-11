@@ -35,6 +35,11 @@ export const router = createRouter({
       component: () => import('@/views/SettingsView.vue'),
     },
     {
+      path: '/waypoints',
+      name: 'waypoints',
+      component: () => import('@/views/WaypointEditorPage.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },
