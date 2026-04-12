@@ -2,13 +2,14 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
-import { InputModule } from '@base/input'
+import { DEFAULT_BINDINGS, InputModule, mergeBindings } from '@base/input'
+import { useInputSettings } from '@/composables/useInputSettings'
 import {
   THIRD_PERSON_CAMERA_PRESET_ORDER,
   type GameplayCameraMode,
   type ThirdPersonCameraPreset,
 } from '@base/camera-three'
-import { ThirdPersonSceneModule } from '@/modules/GameplaySceneModule'
+import { EV_GAMEPLAY_CAMERA_MODE, ThirdPersonSceneModule } from '@/modules/GameplaySceneModule'
 import { scene01 } from '@/scenes/scene-01'
 import { useShellContext } from '@/composables/useShellContext'
 
@@ -16,8 +17,15 @@ const router = useRouter()
 const context = useShellContext()
 const container = ref<HTMLElement>()
 
+const { loadActive } = useInputSettings()
 const engine      = new ThreeModule()
-const inputModule = new InputModule(undefined, { enablePointerLook: true })
+const inputModule = new InputModule(
+  mergeBindings(loadActive(), {
+    keyboard: { toggle_camera: ['Tab'] },
+    gamepad: { toggle_camera: [8] },
+  } as Parameters<typeof mergeBindings>[1]),
+  { enablePointerLook: true },
+)
 const sceneModule = new ThirdPersonSceneModule({
   descriptor: scene01,
   cameraPreset: 'close-follow',
@@ -36,23 +44,16 @@ function cycleCamera(delta: number): void {
   cameraPresetLabel.value = p
 }
 
-function toggleCameraMode(): void {
-  const next: GameplayCameraMode =
-    sceneModule.getCameraMode() === 'third-person' ? 'first-person' : 'third-person'
-  sceneModule.setCameraMode(next)
-  cameraModeLabel.value = next
-  if (next === 'third-person') {
+function onGameplayCameraMode(raw: unknown): void {
+  const { mode } = raw as { mode: GameplayCameraMode }
+  cameraModeLabel.value = mode
+  if (mode === 'third-person') {
     presetIndex = Math.max(0, THIRD_PERSON_CAMERA_PRESET_ORDER.indexOf(sceneModule.getCameraPreset()))
     cameraPresetLabel.value = sceneModule.getCameraPreset()
   }
 }
 
 function onWindowKeyDown(e: KeyboardEvent): void {
-  if (e.code === 'Tab') {
-    e.preventDefault()
-    toggleCameraMode()
-    return
-  }
   if (e.code === 'BracketRight') {
     e.preventDefault()
     cycleCamera(1)
@@ -68,6 +69,8 @@ let hintTimer: ReturnType<typeof setTimeout>
 
 /** Hide WebGL + UI flash while Three.js default camera (0,0,0) runs before the scene module finishes async build. */
 const worldReady = ref(false)
+
+let offCamMode: (() => void) | null = null
 
 onMounted(async () => {
   if (!container.value) return
@@ -91,10 +94,14 @@ onMounted(async () => {
 
   hintTimer = setTimeout(() => { showHint.value = false }, 4000)
 
+  offCamMode = context.eventBus.on(EV_GAMEPLAY_CAMERA_MODE, onGameplayCameraMode)
+
   window.addEventListener('keydown', onWindowKeyDown)
 })
 
 onUnmounted(async () => {
+  offCamMode?.()
+  offCamMode = null
   window.removeEventListener('keydown', onWindowKeyDown)
   clearTimeout(hintTimer)
   await engine.unmount()

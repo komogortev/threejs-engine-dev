@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: 3d | Last: 2026-04-11 | Stack: Vue 3 + @base Three.js harness
-Working: Player locomotion (ground/air/water), third-person camera, sandbox ramps, swimming v1; **dbox** locomotion lab (**`/dbox`**) with OW1-tuned punch/slam/uppercut, pool NPC blobs, uppercut victim lift + **0.6 s** lock on blobs; `GameplaySceneModule.onAfterGameplayTick` hook; optional `carryImpulseDecayPerSecond` scene config
-Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis), Phase 3d not started
+Phase: 3d | Last: 2026-04-12 | Stack: Vue 3 + @base Three.js harness
+Working: Player locomotion (ground/air/water), third-person camera, sandbox ramps, swimming v1; **dbox** locomotion lab (**`/dbox`**) with OW1-tuned punch/slam/uppercut, pool NPC blobs, uppercut victim lift + **0.6 s** lock on blobs; `GameplaySceneModule.onAfterGameplayTick` hook; optional `carryImpulseDecayPerSecond` scene config; **gameplay harmonization Phase 3+4**: `GameplaySceneModule` delegates to `@base/gameplay` `PlayerCameraCoordinator` (tickPlayer/tickCamera split); input settings page (`/settings`) with click-to-rebind keyboard bindings via `useInputSettings` composable + localStorage persistence
+Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis), Phase 3d camera strategy switching not started
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: Uphill threshold fix in PlayerController.ts (maxWalkableSlope), then Phase 3d camera strategy switching; optional — dbox: punch respects NPC lock, slam interacts with blobs, `@base/input` ability actions
+Next: Phase 3d camera strategy switching; optional — dbox: punch respects NPC lock, slam interacts with blobs
 
 ---
 

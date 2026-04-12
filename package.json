@@ -15,6 +15,7 @@
     "@base/ui": "link:../SHARED/packages/ui",
     "@base/camera-three": "link:../SHARED/packages/camera-three",
     "@base/engine-core": "link:../SHARED/packages/engine-core",
+    "@base/gameplay": "link:../SHARED/packages/gameplay",
     "@base/input": "link:../SHARED/packages/input",
     "@base/player-three": "link:../SHARED/packages/player-three",
     "@base/scene-builder": "link:../SHARED/packages/scene-builder",
