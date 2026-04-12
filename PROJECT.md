@@ -13,9 +13,9 @@ A complete, playable dev playground where any `@base` Three.js package can be au
 
 ## Current Milestone
 
-**Phase 3d — Harmonization & Sign-off**
+**Phase 3d — COMPLETE (2026-04-12)**
 
-Goal: align harness and game fork patterns, finalize camera architecture, close the gate that blocks three-dreams Phase 4C. Emphasis on solid foundation over speed.
+Scene editor harmonization done, camera architecture reviewed and documented, Phase 4C gate closed. Foundation track items continue as Phase 3e.
 
 ## Harmonized Plan (2026-04-12)
 
@@ -25,9 +25,9 @@ Work is organized in three tracks. Critical path unblocks the game fork; foundat
 
 | # | Target | Est. | Status |
 |---|--------|------|--------|
-| 1 | Harness scene editor harmonization — `SceneEditorPage.vue` → scenes prop + sandbox + registry | 1 session, 2-3 files | Pending |
-| 2 | Camera architecture review + documentation — formalize strategy switching, document decisions | 1 session | Pending |
-| 3 | Phase 3d sign-off — gate review, unblock three-dreams Phase 4C | — | Blocked on 1-2 |
+| 1 | Harness scene editor harmonization — `SceneEditorPage.vue` → scenes prop + sandbox + registry | 1 session, 2-3 files | **Done** |
+| 2 | Camera architecture review + documentation — formalize strategy switching, document decisions | 1 session | **Done** |
+| 3 | Phase 3d sign-off — gate review, unblock three-dreams Phase 4C | — | **Done** |
 
 ### Foundation Track (parallel, not blocking)
 

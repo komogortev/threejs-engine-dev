@@ -27,7 +27,7 @@ const router = useRouter()
 const sandboxEntry: SceneEditorEntry = {
   id: '__sandbox__',
   label: 'Sandbox',
-  config: { npcs: [], zones: [] },
+  config: { storageKeyPrefix: 'scene-editor:sandbox', exportNamePrefix: 'SANDBOX', npcs: [], zones: [] },
 }
 
 const registryEntries: SceneEditorEntry[] = HARNESS_EDITOR_SCENES.map((s) => ({
