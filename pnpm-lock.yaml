@@ -17,6 +17,9 @@ importers:
       '@base/engine-core':
         specifier: link:../SHARED/packages/engine-core
         version: link:../SHARED/packages/engine-core
+      '@base/gameplay':
+        specifier: link:../SHARED/packages/gameplay
+        version: link:../SHARED/packages/gameplay
       '@base/input':
         specifier: link:../SHARED/packages/input
         version: link:../SHARED/packages/input

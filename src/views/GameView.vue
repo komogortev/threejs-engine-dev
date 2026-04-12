@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { InputModule } from '@base/input'
+import { useInputSettings } from '@/composables/useInputSettings'
 import { AudioModule } from '@base/audio'
 import type { InputActionEvent, InputAxisEvent } from '@base/input'
 import { SpinningCubeModule } from '@/modules/SpinningCubeModule'
@@ -16,7 +17,8 @@ const shell = useShellStore()
 const container = ref<HTMLElement>()
 const engine = new ThreeModule()
 const cubeModule = new SpinningCubeModule()
-const inputModule = new InputModule()
+const { loadActive } = useInputSettings()
+const inputModule = new InputModule(loadActive())
 const audioModule = new AudioModule()
 
 // ─── HUD state for Phase 3 validation ────────────────────────────────────────

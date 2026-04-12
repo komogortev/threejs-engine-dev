@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
-import { DEFAULT_BINDINGS, InputModule } from '@base/input'
+import { DEFAULT_BINDINGS, InputModule, mergeBindings } from '@base/input'
+import { useInputSettings } from '@/composables/useInputSettings'
 import { DboxSceneModule } from '@/modules/DboxSceneModule'
 import { dboxScene } from '@/scenes/dbox'
 import { useShellContext } from '@/composables/useShellContext'
@@ -11,16 +12,23 @@ const router  = useRouter()
 const context = useShellContext()
 const container = ref<HTMLElement>()
 
+const { loadActive } = useInputSettings()
 const engine      = new ThreeModule()
 /** Default binds **KeyE** to `interact`; dbox uses **E** for slam, so drop keyboard interact here. */
 const inputModule = new InputModule(
-  {
-    ...DEFAULT_BINDINGS,
+  mergeBindings(loadActive(), {
     keyboard: {
-      ...DEFAULT_BINDINGS.keyboard,
       interact: [],
+      ability_primary: ['KeyQ'],
+      ability_secondary: ['KeyE'],
+      toggle_camera: ['Tab'],
     },
-  },
+    gamepad: {
+      ability_primary: [3],
+      ability_secondary: [2],
+      toggle_camera: [8],
+    },
+  } as Parameters<typeof mergeBindings>[1]),
   { enablePointerLook: true },
 )
 const sceneModule = new DboxSceneModule({
@@ -229,7 +237,8 @@ onUnmounted(async () => {
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Move</dt><dd>W A S D · 5.5 m/s walk (OW1) · Shift sprint · Space jump · C crouch</dd></div>
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Punch</dt><dd>Right mouse on canvas hold → release (~1.4 s max · 4 s CD) · small upward pop (harness; OW kit is horizontal)</dd></div>
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Uppercut</dt><dd>Q · 6 s CD · NPCs in cone: lift + 0.6 s move/ability lock (OW1)</dd></div>
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>E hold → floor cone at predicted landing · release to slam (cancel: Q / punch / blur) · short forward carry · 6 s CD</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>E hold → cone at mouse→ground (else ≤20 m along aim) · release: dash to apex + slam · 6 s CD</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Camera</dt><dd>Tab — first / third person (click canvas for mouse-look in 1p)</dd></div>
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Time</dt><dd>P pause · F step 1 frame · R resume · [ ] slower / faster</dd></div>
       </dl>
     </div>

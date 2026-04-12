@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
-import { InputModule } from '@base/input'
+import { DEFAULT_BINDINGS, InputModule, mergeBindings } from '@base/input'
+import { useInputSettings } from '@/composables/useInputSettings'
 import { SandboxSceneModule } from '@/modules/SandboxSceneModule'
 import { sandboxScene } from '@/scenes/sandbox'
 import { useShellContext } from '@/composables/useShellContext'
@@ -11,8 +12,15 @@ const router  = useRouter()
 const context = useShellContext()
 const container = ref<HTMLElement>()
 
+const { loadActive } = useInputSettings()
 const engine      = new ThreeModule()
-const inputModule = new InputModule(undefined, { enablePointerLook: true })
+const inputModule = new InputModule(
+  mergeBindings(loadActive(), {
+    keyboard: { toggle_camera: ['Tab'] },
+    gamepad: { toggle_camera: [8] },
+  } as Parameters<typeof mergeBindings>[1]),
+  { enablePointerLook: true },
+)
 const sceneModule = new SandboxSceneModule({
   descriptor: sandboxScene,
   cameraPreset: 'close-follow',
@@ -204,7 +212,7 @@ onUnmounted(async () => {
           move · Shift sprint · Space jump
         </p>
         <p class="text-white/20 text-[10px] tracking-wider text-center">
-          Time: P pause · F step frame · R resume · [ ] slow / fast
+          Tab first / third person · Time: P pause · F step frame · R resume · [ ] slow / fast
         </p>
       </div>
     </Transition>
@@ -226,6 +234,7 @@ onUnmounted(async () => {
         <span class="text-[9px] font-mono text-white/50">{{ item.label }}</span>
       </div>
       <div class="mt-1 border-t border-white/10 pt-1">
+        <p class="text-white/35 text-[9px] font-mono mb-0.5">Tab — first / third person</p>
         <p class="text-white/30 text-[9px] font-mono">Pool: X 15–25 · Z −25–25 · depth 0→−25 m</p>
         <p class="text-white/30 text-[9px] font-mono">Obstacles: knee 0.5 m · body 1.8 m (X 5, 9)</p>
       </div>
