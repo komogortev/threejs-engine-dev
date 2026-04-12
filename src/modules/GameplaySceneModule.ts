@@ -732,7 +732,14 @@ export class GameplaySceneModule extends BaseModule {
       this.player.getCrouchGroundBlend(),
       fpMode ? this.fpPitch : 0,
     )
+    this.onAfterGameplayTick(simDelta, ctx)
   }
+
+  /**
+   * Runs at the end of each gameplay tick after camera update, using the same `simDelta`
+   * as the player (slow-mo / fall dilation included). Subclasses use for lightweight props / NPCs.
+   */
+  protected onAfterGameplayTick(_simDelta: number, _ctx: ThreeContext): void {}
 
   private canUseSecretExtraJumpNow(): boolean {
     return (
