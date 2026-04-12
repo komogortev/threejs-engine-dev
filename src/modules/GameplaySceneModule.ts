@@ -92,6 +92,11 @@ export interface GameplaySceneConfig {
   /** Log resolved animation clip names on CharacterAnimationRig init. */
   debugClipResolution?: boolean
   /**
+   * Exponential decay (per second) for {@link PlayerController} planar carry velocity (ability bursts).
+   * When omitted, the package default applies.
+   */
+  carryImpulseDecayPerSecond?: number
+  /**
    * Navigation / collision mesh that replaces the procedural `TerrainSampler`.
    * Load a GLB whose meshes represent the exact walkable surfaces (ground, roads, rooftops).
    * The mesh is placed with the same transform as the visual GLB so physics aligns.
@@ -362,6 +367,9 @@ export class GameplaySceneModule extends BaseModule {
       debugJumpArc: this.cfg.debugJumpArc,
       maxWalkableSlopeDeg: this.cfg.maxWalkableSlopeDeg,
       cliffDropCatchThreshold: this.cfg.cliffDropCatchThreshold,
+      ...(this.cfg.carryImpulseDecayPerSecond !== undefined
+        ? { carryImpulseDecayPerSecond: this.cfg.carryImpulseDecayPerSecond }
+        : {}),
       extraJumps: 1,
       canUseExtraJump: () => this.canUseSecretExtraJumpNow(),
     })
@@ -374,6 +382,11 @@ export class GameplaySceneModule extends BaseModule {
 
   getPlayerController(): PlayerController {
     return this.player
+  }
+
+  /** Terrain surface Y at world XZ (feet level); `0` when no sampler yet. */
+  protected sampleTerrainSurfaceY(x: number, z: number): number {
+    return this.sampler?.sample(x, z) ?? 0
   }
 
   /** Mounted character root (same object passed into {@link PlayerController.tick}). */

@@ -216,10 +216,10 @@ onUnmounted(async () => {
     >
       <p class="text-white/55 text-[9px] font-mono uppercase tracking-widest mb-1.5">Key map</p>
       <dl class="space-y-1 text-[10px] font-mono leading-snug text-white/45">
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Move</dt><dd>W A S D · Shift sprint · Space jump · C crouch</dd></div>
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Punch</dt><dd>E hold → release (longer hold = farther)</dd></div>
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Uppercut</dt><dd>Q (rising launch)</dd></div>
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>G while airborne</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Move</dt><dd>W A S D · 5.5 m/s walk (OW1) · Shift sprint · Space jump · C crouch</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Punch</dt><dd>E hold → release (~1.4 s max · 4 s CD)</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Uppercut</dt><dd>Q · 6 s CD</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>G air · 6 s CD</dd></div>
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Time</dt><dd>P pause · F step 1 frame · R resume · [ ] slower / faster</dd></div>
       </dl>
     </div>
@@ -243,6 +243,7 @@ onUnmounted(async () => {
         <span class="text-[9px] font-mono text-white/50">{{ item.label }}</span>
       </div>
       <div class="mt-1 border-t border-white/10 pt-1">
+        <p class="text-white/35 text-[9px] font-mono">NPC blobs ×5 · magenta spheres · south of pool entry</p>
         <p class="text-white/30 text-[9px] font-mono">Pool: X 15–25 · Z −25–25 · depth 0→−25 m</p>
         <p class="text-white/30 text-[9px] font-mono">Obstacles: knee 0.5 m · body 1.8 m (X 5, 9)</p>
       </div>
