@@ -34,8 +34,10 @@ export const dboxScene: SceneDescriptor = (() => {
     pruneExtraSkinnedMeshes: true,
     rotationY: base?.rotationY ?? Math.PI / 2,
     terrainFootprintRadius: 0.22,
-    /** Only clips inside `dfist_base.glb` — no Remy / Mixamo FBX sidecars. */
-    animationClipUrls: [],
+    // Shared GLB animation pack served from three-dreams/public via gamePublicFallback.
+    // Uses the same Mixamo-retargeting path as NPC GLBs. FBX sidecars excluded — bone
+    // names in dfist_base.glb differ from Remy and should not be mixed with FBX clips.
+    animationClipUrls: ['/characters/npc/animations_base.glb'],
   }
 
   return d

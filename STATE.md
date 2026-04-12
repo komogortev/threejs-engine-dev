@@ -5,7 +5,7 @@ Phase: 3d | Last: 2026-04-12 | Stack: Vue 3 + @base Three.js harness
 Working: Player locomotion (ground/air/water), third-person camera, sandbox ramps, swimming v1; **dbox** locomotion lab (**`/dbox`**) with OW1-tuned punch/slam/uppercut, pool NPC blobs, uppercut victim lift + **0.6 s** lock on blobs; `GameplaySceneModule.onAfterGameplayTick` hook; optional `carryImpulseDecayPerSecond` scene config; **gameplay harmonization Phase 3+4**: `GameplaySceneModule` delegates to `@base/gameplay` `PlayerCameraCoordinator` (tickPlayer/tickCamera split); input settings page (`/settings`) with click-to-rebind keyboard bindings via `useInputSettings` composable + localStorage persistence
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: Camera architecture review → Phase 3d sign-off (scene editor harmonization done)
+Next: Dialog system (three-dreams) OR Phase 4C cinematic camera — animation harmonization complete, dbox + scene-03 player GLB packs wired
 
 ---
 
@@ -89,6 +89,7 @@ _Last updated: 2026-04-12_
 
 <!-- Append-only. One line per decision, newest first. -->
 
+- **2026-04-12** — **Animation harmonization.** Dbox character (`dfist_base.glb`) wired to `animations_base.glb` GLB pack (same path as three-dreams NPC pack, served via `gamePublicFallback`). `SandboxSceneModule` already sets `debugClipResolution: true` — slot resolution logs visible in dbox. Harmonized rule: FBX characters use `MIXAMO_FBX_CLIP_URLS`; GLB characters use GLB animation pack URL.
 - **2026-04-12** — **Camera architecture reviewed (Target 2).** `@base/camera-three` has no blockers for Phase 4C. Cinematic mode is purely additive: `CinematicCameraRig` + `CameraTransitionManager` + `PlayerCameraCoordinator.suspend/resume` — no existing API changes needed. See `SHARED/packages/camera-three/ARCHITECTURE.md`.
 - **2026-04-12** — **Scene editor harmonization complete (Target 1).** Harness `SceneEditorPage.vue` rewritten to use `scenes` prop pattern (mirrors three-dreams). Created `src/scenes/editor/types.ts`, `registry.ts`, `configs.ts`. Also fixed two pre-existing build errors: `DboxView.vue` `mergeBindings` cast (`as unknown as`), and `EditorOrbitBookmark`/`EDITOR_ORBIT_BOOKMARKS`/`EDITOR_ORBIT_LOCOMOTION_IDS` missing from `@base/ui` src exports + `sceneEditorTypes.ts`.
 - **2026-04-11** — **dbox checkpoint:** locomotion lab lives only in `threejs-engine-dev` (not three-dreams). NPC “blobs” are visual/physics stand-ins for uppercut victim lock (**0.6 s** OW1 air-control window); full AI / `@base/input` ability channels deferred.
