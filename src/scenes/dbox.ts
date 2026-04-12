@@ -34,10 +34,10 @@ export const dboxScene: SceneDescriptor = (() => {
     pruneExtraSkinnedMeshes: true,
     rotationY: base?.rotationY ?? Math.PI / 2,
     terrainFootprintRadius: 0.22,
-    // Shared GLB animation pack served from three-dreams/public via gamePublicFallback.
-    // Uses the same Mixamo-retargeting path as NPC GLBs. FBX sidecars excluded — bone
-    // names in dfist_base.glb differ from Remy and should not be mixed with FBX clips.
-    animationClipUrls: ['/characters/npc/animations_base.glb'],
+    // dfist_base.glb needs embedded locomotion clips for the rig to animate.
+    // A game-asset pack URL must NOT live in the harness descriptor — the harness has
+    // no guaranteed access to three-dreams/public in production builds.
+    animationClipUrls: [],
   }
 
   return d
