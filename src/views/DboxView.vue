@@ -203,22 +203,34 @@ onUnmounted(async () => {
         <p class="text-white/30 text-[11px] tracking-widest uppercase text-center">
           move · Shift sprint · Space jump
         </p>
-        <p class="text-white/25 text-[10px] tracking-wider text-center">
-          Abilities: E charge punch · Q uppercut · G slam (air)
-        </p>
         <p class="text-white/20 text-[10px] tracking-wider text-center">
           Time: P pause · F step frame · R resume · [ ] slow / fast
         </p>
       </div>
     </Transition>
 
+    <!-- Key bindings — always visible -->
+    <div
+      v-if="worldReady"
+      class="absolute top-16 left-4 z-40 max-w-[16.5rem] rounded-lg border border-white/15 bg-black/55 px-3 py-2.5 backdrop-blur-sm"
+    >
+      <p class="text-white/55 text-[9px] font-mono uppercase tracking-widest mb-1.5">Key map</p>
+      <dl class="space-y-1 text-[10px] font-mono leading-snug text-white/45">
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Move</dt><dd>W A S D · Shift sprint · Space jump · C crouch</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Punch</dt><dd>E hold → release (longer hold = farther)</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Uppercut</dt><dd>Q (rising launch)</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>G while airborne</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Time</dt><dd>P pause · F step 1 frame · R resume · [ ] slower / faster</dd></div>
+      </dl>
+    </div>
+
     <!-- Fixture legend (bottom-left) — same layout as sandbox -->
     <div
       v-if="worldReady"
-      class="absolute bottom-4 left-4 z-40 flex flex-col gap-0.5 bg-black/50 border border-white/10 rounded-lg px-3 py-2 backdrop-blur-sm"
+      class="absolute bottom-4 left-4 z-40 flex flex-col gap-0.5 bg-black/50 border border-white/10 rounded-lg px-3 py-2 backdrop-blur-sm max-w-[min(100vw-2rem,22rem)]"
     >
       <p class="text-white/40 text-[9px] font-mono uppercase tracking-widest mb-0.5">dbox · locomotion lab</p>
-      <p class="text-white/35 text-[9px] font-mono mb-1">E punch · Q uppercut · G slam (air)</p>
+      <p class="text-white/35 text-[9px] font-mono mb-1">Keys: top-left panel</p>
       <p class="text-white/30 text-[9px] font-mono uppercase tracking-widest mb-1">Landing tiers (X ≈ −28)</p>
       <div v-for="item in [
         { label: 'soft     ~2 m', color: '#22d3ee' },

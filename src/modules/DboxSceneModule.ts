@@ -5,11 +5,14 @@ import { SandboxSceneModule } from './SandboxSceneModule'
 const CD_PUNCH_S = 1.15
 const CD_UPPERCUT_S = 1.0
 const CD_SLAM_S = 0.85
-const PUNCH_CHARGE_MAX_S = 1.0
-const PUNCH_SPEED_MIN = 9
-const PUNCH_SPEED_MAX = 24
+/** Full hold duration before impulse peaks (longer hold = clearly farther travel). */
+const PUNCH_CHARGE_MAX_S = 1.35
+/** Tap-release: short slide. Full charge: strong forward carry (distance scales ~linearly with peak m/s / decay). */
+const PUNCH_SPEED_MIN = 4
+const PUNCH_SPEED_MAX = 58
 const UPPERCUT_FORWARD = 3.5
-const UPPERCUT_UP = 9.5
+/** Vertical launch (m/s); tuned 2× prior prototype height. */
+const UPPERCUT_UP = 19
 const SLAM_DOWN = -16
 
 /**
@@ -113,7 +116,9 @@ export class DboxSceneModule extends SandboxSceneModule {
 
     const heldS = Math.min(PUNCH_CHARGE_MAX_S, Math.max(0, (performance.now() - this.punchHoldStartMs) * 0.001))
     const chargeT = PUNCH_CHARGE_MAX_S <= 1e-6 ? 1 : heldS / PUNCH_CHARGE_MAX_S
-    const speed = PUNCH_SPEED_MIN + (PUNCH_SPEED_MAX - PUNCH_SPEED_MIN) * chargeT
+    // Ease so short taps stay weak; long holds gain most of the range (distance grows strongly with charge).
+    const shaped = Math.pow(chargeT, 1.45)
+    const speed = PUNCH_SPEED_MIN + (PUNCH_SPEED_MAX - PUNCH_SPEED_MIN) * shaped
     const f = this.getPlayerController().getFacing()
     const fx = -Math.sin(f) * speed
     const fz = -Math.cos(f) * speed
