@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
-import { InputModule } from '@base/input'
+import { DEFAULT_BINDINGS, InputModule } from '@base/input'
 import { DboxSceneModule } from '@/modules/DboxSceneModule'
 import { dboxScene } from '@/scenes/dbox'
 import { useShellContext } from '@/composables/useShellContext'
@@ -12,7 +12,17 @@ const context = useShellContext()
 const container = ref<HTMLElement>()
 
 const engine      = new ThreeModule()
-const inputModule = new InputModule(undefined, { enablePointerLook: true })
+/** Default binds **KeyE** to `interact`; dbox uses **E** for slam, so drop keyboard interact here. */
+const inputModule = new InputModule(
+  {
+    ...DEFAULT_BINDINGS,
+    keyboard: {
+      ...DEFAULT_BINDINGS.keyboard,
+      interact: [],
+    },
+  },
+  { enablePointerLook: true },
+)
 const sceneModule = new DboxSceneModule({
   descriptor: dboxScene,
   cameraPreset: 'close-follow',
@@ -217,9 +227,9 @@ onUnmounted(async () => {
       <p class="text-white/55 text-[9px] font-mono uppercase tracking-widest mb-1.5">Key map</p>
       <dl class="space-y-1 text-[10px] font-mono leading-snug text-white/45">
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Move</dt><dd>W A S D · 5.5 m/s walk (OW1) · Shift sprint · Space jump · C crouch</dd></div>
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Punch</dt><dd>E hold → release (~1.4 s max · 4 s CD)</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Punch</dt><dd>Right mouse on canvas hold → release (~1.4 s max · 4 s CD) · small upward pop (harness; OW kit is horizontal)</dd></div>
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Uppercut</dt><dd>Q · 6 s CD · NPCs in cone: lift + 0.6 s move/ability lock (OW1)</dd></div>
-        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>G air · 6 s CD</dd></div>
+        <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Slam</dt><dd>E hold → floor cone at predicted landing · release to slam (cancel: Q / punch / blur) · short forward carry · 6 s CD</dd></div>
         <div class="flex gap-2"><dt class="shrink-0 text-cyan-400/90 w-14">Time</dt><dd>P pause · F step 1 frame · R resume · [ ] slower / faster</dd></div>
       </dl>
     </div>

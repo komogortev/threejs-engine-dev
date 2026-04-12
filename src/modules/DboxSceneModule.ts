@@ -5,11 +5,27 @@ import type { SceneDescriptor } from '@base/scene-builder'
 import { SandboxSceneModule } from './SandboxSceneModule'
 import type { ThirdPersonSceneConfig } from './GameplaySceneModule'
 
+export type DboxSceneModuleOptions = Partial<ThirdPersonSceneConfig> & {
+  descriptor?: SceneDescriptor
+  /**
+   * Uppercut blob planar speed added along facing, in m/s at full forward move intent
+   * (`moveIntent.y` clamped 0–1). Default {@link DEFAULT_UPPERCUT_NPC_MOVE_INTENT_FORWARD_BIAS}.
+   */
+  uppercutNpcMoveIntentForwardBias?: number
+}
+
 /**
  * OW1 Doomfist-adjacent tuning (see research): standard hero walk **5.5 m/s**, rocket punch
  * **~10–20 m** self-displacement with **~1.4 s** max charge and **4 s** CD, uppercut / slam **6 s** CD.
  * Planar carry peak speeds are scaled with {@link carryImpulseDecayPerSecond} **8** so asymptotic slide
  * distance is roughly **v / k** metres (≈10–20 m band at full charge).
+ *
+ * **Rocket Punch vertical (research):** Official descriptions emphasize a **horizontal** lunge after
+ * release — e.g. [Rocket Punch (OW archive)](https://overwatch-archive.fandom.com/wiki/Rocket_Punch)
+ * (“launches forward horizontally”). Extra **vertical** mobility in OW was largely **player tech**
+ * (jump-cancel / “rocket bounce” near surfaces) or aim-based routing, not a large baseline hop on
+ * every punch. This harness adds only a **small** upward impulse so the slide reads airborne and
+ * clears minor ground clutter; tune `PUNCH_SELF_LIFT_VY_MIN` / `PUNCH_SELF_LIFT_VY_MAX`.
  */
 const CD_PUNCH_S = 4
 const CD_UPPERCUT_S = 6
@@ -19,26 +35,66 @@ const PUNCH_CHARGE_MAX_S = 1.4
 const PUNCH_SPEED_MIN = 78
 /** ~20 m slide at full charge. */
 const PUNCH_SPEED_MAX = 152
+/** Upward speed (m/s) added on punch release at **min** charge — small hop (not OW literal). */
+const PUNCH_SELF_LIFT_VY_MIN = 1.65
+/** Extra upward speed (m/s) at **full** charge (linear in shaped charge). */
+const PUNCH_SELF_LIFT_VY_MAX = 3.15
 const UPPERCUT_FORWARD = 4
-const UPPERCUT_UP = 14
+/**
+ * Rise phase ~**+0.5 s** longer than legacy `14` m/s at default gravity **30** (`Δvy = 0.5 × g`).
+ */
+const UPPERCUT_UP = 29
 const SLAM_DOWN = -20
+/** Match {@link PlayerController} default `gravity` for landing prediction. */
+const SLAM_GRAVITY_PRED = 30
+/** Ground-plane slam AoE: frontal wedge length (m) and total aperture (deg). */
+const SLAM_CONE_RANGE = 7.25
+const SLAM_CONE_DEG = 86
+const SLAM_CONE_SEG = 22
+/** Lift preview lines slightly above sampled terrain to reduce z-fighting. */
+const SLAM_PREVIEW_Y = 0.045
+/**
+ * Baseline forward planar speed (m/s) added on slam release; clamped so decay-integrated
+ * slide is at least {@link SLAM_FORWARD_MIN_TRAVEL_M} (see `executeSlamOnKeyRelease`).
+ */
+const SLAM_FORWARD_CARRY_MS = 4.25
+/** Minimum planar distance (m) the slam carry impulse should asymptotically produce along facing (`v ≥ k·s`). */
+const SLAM_FORWARD_MIN_TRAVEL_M = 1
+const SLAM_PRED_DT = 1 / 120
+const SLAM_PRED_MAX_STEPS = Math.ceil(6 / SLAM_PRED_DT)
 
 /**
  * OW1 Rising Uppercut victim behaviour (Dec 11, 2018 patch notes / wiki): **~0.6 s** loss of air control —
  * represented here as no self-movement or ability use on the dummy NPC for that window while external
  * lift / gravity integration runs.
+ *
+ * Horizontal knockback uses the **same** initial planar carry vector and exponential decay as
+ * {@link PlayerController.addPlanarCarryImpulse} / {@link GameplaySceneConfig.carryImpulseDecayPerSecond}
+ * so dummy displacement tracks the uppercut’s self-slide, plus a small optional forward term
+ * from {@link PlayerController.getSnapshot} `moveIntent.y` (W / stick forward) — see
+ * {@link DboxSceneModuleOptions.uppercutNpcMoveIntentForwardBias}.
  */
 const UPPERCUT_VICTIM_LOCK_S = 0.6
 const UPPERCUT_HIT_RADIUS_XZ = 4.25
 /** Total cone aperture in degrees (rough frontal arc). */
 const UPPERCUT_HIT_CONE_DEG = 105
 const UPPERCUT_HIT_MAX_Y_DELTA = 2.85
-const UPPERCUT_NPC_LAUNCH_Y = 11.5
-const UPPERCUT_NPC_OUTWARD_XZ = 2.4
 /** Match {@link PlayerController} default gravity for coherent arcs. */
 const UPPERCUT_NPC_GRAVITY = 30
+/**
+ * Minimum planar carry (m/s) before **Space** consumes jump as a rocket-punch skim / bounce
+ * (OW1 jump-cancel off punch momentum — see module header + `PlayerController.tryActivateRocketPunchSkimJump`).
+ */
+const PUNCH_SKIM_MIN_CARRY = 22
 const UPPERCUT_LOCK_EMISSIVE = 0.95
 const BLOB_IDLE_EMISSIVE = 0.35
+
+/**
+ * Extra planar knockback speed (m/s) along body forward when move intent is full **forward**
+ * (`moveIntent.y` → 1). Scales linearly; 0 intent adds nothing. Approximates W-held uppercut slide
+ * on the player without simulating full locomotion on blobs.
+ */
+const DEFAULT_UPPERCUT_NPC_MOVE_INTENT_FORWARD_BIAS = 0.85
 
 /** Pool AABB (matches `SandboxSceneModule`); blobs sit on dry ground outside this footprint. */
 const POOL_MIN_X = 15
@@ -72,33 +128,65 @@ interface BlobNpc {
  * Sandbox fixtures + OW1-tuned hero locomotion prototype + NPC blobs by the pool.
  * Rising Uppercut applies OW1-style victim lock and lift to blobs in frontal range.
  *
- * **Bindings:** **E** hold → release rocket punch · **Q** uppercut · **G** slam (air).
+ * **Bindings:** **right mouse** on canvas → hold / release **rocket punch** · **E** **slam**
+ * (hold: floor-cone preview at predicted landing; release executes, or cancel via **Q** / punch / blur)
+ * · **Q** uppercut · **Space** during strong rocket-punch carry: skim jump.
+ *
+ * Abilities are **only** gated by their own cooldowns and water (no global cast lock). Use
+ * `DboxView` `InputModule` bindings with keyboard `interact: []` so **E** (slam) is not also
+ * bound to default **interact**.
  */
 export class DboxSceneModule extends SandboxSceneModule {
-  private punchEHeld = false
+  /** Right-button hold timing for rocket punch charge. */
+  private punchRMBHeld = false
   private punchHoldStartMs = 0
+  /**
+   * When **RMB** is released during punch CD, keep charge and fire as soon as CD allows
+   * (see {@link flushPendingRocketPunch}).
+   */
+  private pendingRocketPunchHoldS: number | null = null
   private lastPunchMs = -1e9
   private lastUppercutMs = -1e9
   private lastSlamMs = -1e9
+  /** E held: show slam AoE; release executes (unless cancelled by another ability). */
+  private slamHoldActive = false
+  /**
+   * After {@link cancelSlamDueToInterrupt}, swallow the next **KeyE** `keyup` so a held key
+   * does not immediately fire slam.
+   */
+  private slamSuppressNextKeyUp = false
+  private slamPreviewLine: THREE.Line | null = null
+  private slamPreviewGeom: THREE.BufferGeometry | null = null
+  private slamPreviewPos: THREE.BufferAttribute | null = null
+  private readonly slamPreviewScratch: THREE.Vector3[] = []
+  /** Scene / assets for slam preview lines (set in {@link onMount}). */
+  private slamHostCtx: ThreeContext | null = null
   private readonly keyCleanup: Array<() => void> = []
   private readonly blobs: BlobNpc[] = []
+  private readonly uppercutNpcMoveIntentForwardBias: number
 
-  constructor(options: Partial<ThirdPersonSceneConfig> & { descriptor?: SceneDescriptor } = {}) {
+  constructor(options: DboxSceneModuleOptions = {}) {
+    const { uppercutNpcMoveIntentForwardBias, ...rest } = options
     super({
-      ...options,
-      characterSpeed: options.characterSpeed ?? 5.5,
-      carryImpulseDecayPerSecond: options.carryImpulseDecayPerSecond ?? 8,
+      ...rest,
+      characterSpeed: rest.characterSpeed ?? 5.5,
+      carryImpulseDecayPerSecond: rest.carryImpulseDecayPerSecond ?? 8,
     })
+    this.uppercutNpcMoveIntentForwardBias =
+      uppercutNpcMoveIntentForwardBias ?? DEFAULT_UPPERCUT_NPC_MOVE_INTENT_FORWARD_BIAS
   }
 
   protected override async onMount(container: HTMLElement, context: EngineContext): Promise<void> {
     await super.onMount(container, context)
     const ctx = context as ThreeContext
+    this.slamHostCtx = ctx
     this.spawnPoolBlobs(ctx.scene)
-    this.mountAbilityKeys()
+    this.mountAbilityInput(container)
   }
 
   protected override async onUnmount(): Promise<void> {
+    this.disposeSlamPreview()
+    this.slamHostCtx = null
     for (const off of this.keyCleanup) off()
     this.keyCleanup.length = 0
     for (const b of this.blobs) b.mesh.parent?.remove(b.mesh)
@@ -106,27 +194,50 @@ export class DboxSceneModule extends SandboxSceneModule {
     await super.onUnmount()
   }
 
-  protected override onAfterGameplayTick(simDelta: number, _ctx: ThreeContext): void {
+  protected override onBeforeGameplayTick(_simDelta: number, _ctx: ThreeContext): void {
+    this.flushPendingRocketPunch()
+  }
+
+  protected override onAfterGameplayTick(simDelta: number, ctx: ThreeContext): void {
+    if (this.slamHoldActive) {
+      const snap = this.getPlayerController().getSnapshot()
+      if (snap.waterMode !== null) {
+        this.cancelSlamDueToInterrupt()
+      } else {
+        this.updateSlamPreview(ctx)
+      }
+    }
     this.tickBlobNpcs(simDelta)
   }
 
-  private mountAbilityKeys(): void {
+  protected override handleJumpPressedEarly(): boolean {
+    return this.getPlayerController().tryActivateRocketPunchSkimJump(
+      this.getCharacter(),
+      PUNCH_SKIM_MIN_CARRY,
+    )
+  }
+
+  private mountAbilityInput(gameContainer: HTMLElement): void {
+    const opts: AddEventListenerOptions = { capture: true }
+
+    let onPunchMouseUp: ((e: MouseEvent) => void) | null = null
+    const detachPunchMouseUp = (): void => {
+      if (onPunchMouseUp) {
+        window.removeEventListener('mouseup', onPunchMouseUp, opts)
+        onPunchMouseUp = null
+      }
+    }
+
     const onKeyDown = (e: KeyboardEvent): void => {
       const tag = (e.target as HTMLElement | undefined)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
       if (e.repeat) return
 
       if (e.code === 'KeyE') {
-        if (!this.punchEHeld) {
-          this.punchEHeld = true
-          this.punchHoldStartMs = performance.now()
-        }
+        this.tryBeginSlamHold()
         e.preventDefault()
       } else if (e.code === 'KeyQ') {
         this.tryUppercut()
-        e.preventDefault()
-      } else if (e.code === 'KeyG') {
-        this.trySlam()
         e.preventDefault()
       }
     }
@@ -134,20 +245,279 @@ export class DboxSceneModule extends SandboxSceneModule {
     const onKeyUp = (e: KeyboardEvent): void => {
       const tag = (e.target as HTMLElement | undefined)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      if (e.code === 'KeyE' && this.punchEHeld) {
-        this.punchEHeld = false
-        this.fireRocketPunch()
+      if (e.code === 'KeyE') {
+        this.tryReleaseSlamKey()
         e.preventDefault()
       }
     }
 
-    const opts: AddEventListenerOptions = { capture: true }
+    const onPunchMouseDown = (e: MouseEvent): void => {
+      if (e.button !== 2) return
+      const t = e.target as Node | null
+      if (t == null || !(gameContainer === t || gameContainer.contains(t))) return
+      const snap = this.getPlayerController().getSnapshot()
+      if (snap.waterMode !== null) return
+
+      e.preventDefault()
+      this.cancelSlamDueToInterrupt()
+      this.pendingRocketPunchHoldS = null
+      this.punchRMBHeld = true
+      this.punchHoldStartMs = performance.now()
+
+      detachPunchMouseUp()
+      onPunchMouseUp = (up: MouseEvent): void => {
+        if (up.button !== 2 || !this.punchRMBHeld) return
+        this.punchRMBHeld = false
+        detachPunchMouseUp()
+        const heldS = Math.min(
+          PUNCH_CHARGE_MAX_S,
+          Math.max(0, (performance.now() - this.punchHoldStartMs) * 0.001),
+        )
+        const snapUp = this.getPlayerController().getSnapshot()
+        if (snapUp.waterMode === null && !this.fireRocketPunchFromHoldSeconds(heldS)) {
+          this.pendingRocketPunchHoldS = heldS
+        }
+      }
+      window.addEventListener('mouseup', onPunchMouseUp, opts)
+    }
+
+    const onContextMenu = (e: MouseEvent): void => {
+      const t = e.target as Node | null
+      if (t == null || !(gameContainer === t || gameContainer.contains(t))) return
+      e.preventDefault()
+    }
+
     window.addEventListener('keydown', onKeyDown, opts)
     window.addEventListener('keyup', onKeyUp, opts)
+    gameContainer.addEventListener('mousedown', onPunchMouseDown, opts)
+    gameContainer.addEventListener('contextmenu', onContextMenu, opts)
+
+    const onWindowBlur = (): void => {
+      this.punchRMBHeld = false
+      this.pendingRocketPunchHoldS = null
+      detachPunchMouseUp()
+      this.cancelSlamDueToBlur()
+    }
+    window.addEventListener('blur', onWindowBlur)
+
     this.keyCleanup.push(
       () => window.removeEventListener('keydown', onKeyDown, opts),
       () => window.removeEventListener('keyup', onKeyUp, opts),
+      () => gameContainer.removeEventListener('mousedown', onPunchMouseDown, opts),
+      () => gameContainer.removeEventListener('contextmenu', onContextMenu, opts),
+      () => window.removeEventListener('blur', onWindowBlur),
+      () => {
+        detachPunchMouseUp()
+      },
     )
+  }
+
+  private cancelSlamDueToInterrupt(): void {
+    if (!this.slamHoldActive) return
+    this.slamHoldActive = false
+    this.slamSuppressNextKeyUp = true
+    this.setSlamPreviewVisible(false)
+  }
+
+  private cancelSlamDueToBlur(): void {
+    this.cancelSlamDueToInterrupt()
+  }
+
+  private tryBeginSlamHold(): void {
+    if (this.slamHoldActive) return
+    const snap = this.getPlayerController().getSnapshot()
+    if (snap.waterMode !== null) return
+    this.slamSuppressNextKeyUp = false
+    this.slamHoldActive = true
+    const ctx = this.slamHostCtx
+    if (ctx) {
+      this.ensureSlamPreviewLine(ctx)
+      this.updateSlamPreview(ctx)
+    }
+  }
+
+  private tryReleaseSlamKey(): void {
+    if (this.slamSuppressNextKeyUp) {
+      this.slamSuppressNextKeyUp = false
+      this.setSlamPreviewVisible(false)
+      return
+    }
+    if (!this.slamHoldActive) return
+    this.slamHoldActive = false
+    this.setSlamPreviewVisible(false)
+    this.executeSlamOnKeyRelease()
+  }
+
+  private executeSlamOnKeyRelease(): void {
+    const t = performance.now() * 0.001
+    if (t - this.lastSlamMs < CD_SLAM_S) return
+    const snap = this.getPlayerController().getSnapshot()
+    if (snap.waterMode !== null) return
+
+    const land = this.predictSlamLanding()
+    const f = this.getPlayerController().getFacing()
+    const kCarry = this.cfg.carryImpulseDecayPerSecond ?? 8
+    const forwardMs = Math.max(SLAM_FORWARD_CARRY_MS, kCarry * SLAM_FORWARD_MIN_TRAVEL_M)
+    const fx = -Math.sin(f) * forwardMs
+    const fz = -Math.cos(f) * forwardMs
+    this.getPlayerController().addPlanarCarryImpulse(fx, fz)
+    this.getPlayerController().applyVerticalAbilityImpulse(SLAM_DOWN, this.getCharacter())
+    this.applySlamToBlobsInCone(land.x, land.z, land.ySurf, f)
+
+    this.lastSlamMs = t
+  }
+
+  /**
+   * Ballistic landing XZ + terrain Y under that point (constant gravity, no air-control).
+   * Uses current root height above sampled terrain as the landing clearance target.
+   */
+  private predictSlamLanding(): { x: number; z: number; ySurf: number } {
+    const player = this.getPlayerController()
+    const snap = player.getSnapshot()
+    const carry = player.getPlanarCarryVelocity()
+
+    if (snap.grounded && Math.abs(snap.velocity.y) < 0.25) {
+      const ySurf = this.sampleTerrainSurfaceY(snap.position.x, snap.position.z)
+      return { x: snap.position.x, z: snap.position.z, ySurf }
+    }
+
+    let px = snap.position.x
+    let py = snap.position.y
+    let pz = snap.position.z
+    let vx = snap.velocity.x + carry.x
+    let vz = snap.velocity.z + carry.z
+    let vy = snap.velocity.y
+    const g = SLAM_GRAVITY_PRED
+    const supportOffset = py - this.sampleTerrainSurfaceY(px, pz)
+
+    for (let i = 0; i < SLAM_PRED_MAX_STEPS; i += 1) {
+      const gy = this.sampleTerrainSurfaceY(px, pz)
+      const targetRootY = gy + supportOffset
+      if (py <= targetRootY + 0.08 && vy <= 0.35) {
+        return { x: px, z: pz, ySurf: gy }
+      }
+      px += vx * SLAM_PRED_DT
+      pz += vz * SLAM_PRED_DT
+      py += vy * SLAM_PRED_DT
+      vy -= g * SLAM_PRED_DT
+    }
+
+    const ySurf = this.sampleTerrainSurfaceY(px, pz)
+    return { x: px, z: pz, ySurf }
+  }
+
+  private ensureSlamPreviewLine(ctx: ThreeContext): void {
+    if (this.slamPreviewLine) return
+    const maxVerts = SLAM_CONE_SEG + 4
+    const arr = new Float32Array(maxVerts * 3)
+    const attr = new THREE.BufferAttribute(arr, 3)
+    attr.setUsage(THREE.DynamicDrawUsage)
+    const geom = new THREE.BufferGeometry()
+    geom.setAttribute('position', attr)
+    geom.setDrawRange(0, 0)
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xff7a18,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    })
+    const line = new THREE.LineLoop(geom, mat)
+    line.name = 'dbox-slam-preview'
+    line.frustumCulled = false
+    line.renderOrder = 900
+    ctx.scene.add(line)
+    this.slamPreviewLine = line
+    this.slamPreviewGeom = geom
+    this.slamPreviewPos = attr
+  }
+
+  private disposeSlamPreview(): void {
+    const line = this.slamPreviewLine
+    if (line) {
+      line.removeFromParent()
+      line.geometry.dispose()
+      ;(line.material as THREE.Material).dispose()
+    }
+    this.slamPreviewLine = null
+    this.slamPreviewGeom = null
+    this.slamPreviewPos = null
+  }
+
+  private setSlamPreviewVisible(visible: boolean): void {
+    if (this.slamPreviewLine) this.slamPreviewLine.visible = visible
+  }
+
+  private updateSlamPreview(ctx: ThreeContext): void {
+    this.ensureSlamPreviewLine(ctx)
+    const land = this.predictSlamLanding()
+    const f = this.getPlayerController().getFacing()
+    const n = this.writeSlamConeOutlinePositions(land.x, land.z, f)
+    const geom = this.slamPreviewGeom
+    const attr = this.slamPreviewPos
+    if (!geom || !attr) return
+    geom.setDrawRange(0, n)
+    attr.needsUpdate = true
+    geom.computeBoundingSphere()
+    this.setSlamPreviewVisible(true)
+  }
+
+  /**
+   * Writes a flat **LineLoop** on the terrain: apex at predicted landing, rim at {@link SLAM_CONE_RANGE}.
+   * @returns vertex count for `setDrawRange`.
+   */
+  private writeSlamConeOutlinePositions(landX: number, landZ: number, facing: number): number {
+    const attr = this.slamPreviewPos
+    if (!attr) return 0
+    const w = attr.array as Float32Array
+    const fwdX = -Math.sin(facing)
+    const fwdZ = -Math.cos(facing)
+    const half = THREE.MathUtils.degToRad(SLAM_CONE_DEG * 0.5)
+    const R = SLAM_CONE_RANGE
+    let o = 0
+    const y0 = this.sampleTerrainSurfaceY(landX, landZ) + SLAM_PREVIEW_Y
+    w[o++] = landX
+    w[o++] = y0
+    w[o++] = landZ
+    for (let i = 0; i <= SLAM_CONE_SEG; i += 1) {
+      const u = SLAM_CONE_SEG <= 0 ? 0 : i / SLAM_CONE_SEG
+      const ang = -half + 2 * half * u
+      const c = Math.cos(ang)
+      const s = Math.sin(ang)
+      const dx = fwdX * c - fwdZ * s
+      const dz = fwdZ * c + fwdX * s
+      const x = landX + dx * R
+      const z = landZ + dz * R
+      w[o++] = x
+      w[o++] = this.sampleTerrainSurfaceY(x, z) + SLAM_PREVIEW_Y
+      w[o++] = z
+    }
+    return (SLAM_CONE_SEG + 2)
+  }
+
+  private applySlamToBlobsInCone(landX: number, landZ: number, ySurf: number, facing: number): void {
+    const fwdX = -Math.sin(facing)
+    const fwdZ = -Math.cos(facing)
+    const cosHalf = Math.cos(THREE.MathUtils.degToRad(SLAM_CONE_DEG * 0.5))
+    const y0 = ySurf + SLAM_PREVIEW_Y
+    for (const b of this.blobs) {
+      const bx = b.mesh.position.x
+      const bz = b.mesh.position.z
+      const dx = bx - landX
+      const dz = bz - landZ
+      const dist = Math.hypot(dx, dz)
+      if (dist > SLAM_CONE_RANGE || dist < 1e-4) continue
+      const inv = 1 / dist
+      const nx = dx * inv
+      const nz = dz * inv
+      const dot = nx * fwdX + nz * fwdZ
+      if (dot < cosHalf) continue
+      if (b.mesh.position.y < y0 - 2.5 || b.mesh.position.y > y0 + 6) continue
+
+      b.vy = Math.min(b.vy, SLAM_DOWN * 0.35)
+      const knock = 3.2
+      b.vx += nx * knock
+      b.vz += nz * knock
+    }
   }
 
   private spawnPoolBlobs(scene: THREE.Scene): void {
@@ -194,11 +564,10 @@ export class DboxSceneModule extends SandboxSceneModule {
       b.mesh.position.y += b.vy * dt
       b.vy -= g * dt
 
-      if (b.lockRemaining > 0) {
-        const drag = Math.exp(-5.5 * dt)
-        b.vx *= drag
-        b.vz *= drag
-      }
+      const kCarry = this.cfg.carryImpulseDecayPerSecond ?? 8
+      const carryDecay = Math.exp(-kCarry * dt)
+      b.vx *= carryDecay
+      b.vz *= carryDecay
 
       const ground = this.sampleTerrainSurfaceY(b.mesh.position.x, b.mesh.position.z) + BLOB_RADIUS
       if (b.mesh.position.y <= ground && b.vy <= 0) {
@@ -219,6 +588,10 @@ export class DboxSceneModule extends SandboxSceneModule {
     const fwdX = -Math.sin(facing)
     const fwdZ = -Math.cos(facing)
     const cosHalf = Math.cos(THREE.MathUtils.degToRad(UPPERCUT_HIT_CONE_DEG * 0.5))
+    const snap = this.getPlayerController().getSnapshot()
+    const forwardIntent01 = THREE.MathUtils.clamp(snap.moveIntent.y, 0, 1)
+    const planarForward =
+      UPPERCUT_FORWARD + forwardIntent01 * this.uppercutNpcMoveIntentForwardBias
 
     for (const b of this.blobs) {
       const bx = b.mesh.position.x
@@ -236,15 +609,14 @@ export class DboxSceneModule extends SandboxSceneModule {
       if (dot < cosHalf) continue
 
       b.lockRemaining = UPPERCUT_VICTIM_LOCK_S
-      b.vy = Math.max(b.vy, UPPERCUT_NPC_LAUNCH_Y)
-      const ox = nx * UPPERCUT_NPC_OUTWARD_XZ
-      const oz = nz * UPPERCUT_NPC_OUTWARD_XZ
-      b.vx = ox + fwdX * 1.2
-      b.vz = oz + fwdZ * 1.2
+      b.vy = Math.max(b.vy, UPPERCUT_UP)
+      b.vx = fwdX * planarForward
+      b.vz = fwdZ * planarForward
     }
   }
 
   private tryUppercut(): void {
+    this.cancelSlamDueToInterrupt()
     const t = performance.now()
     if (t * 0.001 - this.lastUppercutMs < CD_UPPERCUT_S) return
     const snap = this.getPlayerController().getSnapshot()
@@ -259,36 +631,43 @@ export class DboxSceneModule extends SandboxSceneModule {
     this.lastUppercutMs = t * 0.001
   }
 
-  private trySlam(): void {
-    const t = performance.now()
-    if (t * 0.001 - this.lastSlamMs < CD_SLAM_S) return
+  private flushPendingRocketPunch(): void {
+    if (this.pendingRocketPunchHoldS == null) return
     const snap = this.getPlayerController().getSnapshot()
-    if (snap.waterMode !== null) return
-    if (snap.grounded) return
-
-    const f = this.getPlayerController().getFacing()
-    const fx = -Math.sin(f) * 2.5
-    const fz = -Math.cos(f) * 2.5
-    this.getPlayerController().addPlanarCarryImpulse(fx, fz)
-    this.getPlayerController().applyVerticalAbilityImpulse(SLAM_DOWN, this.getCharacter())
-    this.lastSlamMs = t * 0.001
+    if (snap.waterMode !== null) {
+      this.pendingRocketPunchHoldS = null
+      return
+    }
+    if (this.fireRocketPunchFromHoldSeconds(this.pendingRocketPunchHoldS)) {
+      this.pendingRocketPunchHoldS = null
+    }
   }
 
-  private fireRocketPunch(): void {
+  /**
+   * @returns `true` if impulses were applied (CD elapsed and not in water).
+   */
+  private fireRocketPunchFromHoldSeconds(heldS: number): boolean {
     const t = performance.now() * 0.001
-    if (t - this.lastPunchMs < CD_PUNCH_S) return
+    if (t - this.lastPunchMs < CD_PUNCH_S) return false
     const snap = this.getPlayerController().getSnapshot()
-    if (snap.waterMode !== null) return
+    if (snap.waterMode !== null) return false
 
-    const heldS = Math.min(PUNCH_CHARGE_MAX_S, Math.max(0, (performance.now() - this.punchHoldStartMs) * 0.001))
+    this.cancelSlamDueToInterrupt()
+
     const chargeT = PUNCH_CHARGE_MAX_S <= 1e-6 ? 1 : heldS / PUNCH_CHARGE_MAX_S
     const shaped = Math.pow(chargeT, 1.12)
     const speed = PUNCH_SPEED_MIN + (PUNCH_SPEED_MAX - PUNCH_SPEED_MIN) * shaped
     const f = this.getPlayerController().getFacing()
     const fx = -Math.sin(f) * speed
     const fz = -Math.cos(f) * speed
-    this.getPlayerController().addPlanarCarryImpulse(fx, fz)
+    this.getPlayerController().setPlanarCarryVelocity(fx, fz)
+    const liftVy =
+      PUNCH_SELF_LIFT_VY_MIN + (PUNCH_SELF_LIFT_VY_MAX - PUNCH_SELF_LIFT_VY_MIN) * shaped
+    this.getPlayerController().applyVerticalAbilityImpulse(liftVy, this.getCharacter(), {
+      verticalBlend: 'replace',
+    })
     this.lastPunchMs = t
+    return true
   }
 }
 
