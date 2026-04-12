@@ -28,7 +28,7 @@ const inputModule = new InputModule(
       ability_secondary: [2],
       toggle_camera: [8],
     },
-  } as Parameters<typeof mergeBindings>[1]),
+  } as unknown as Parameters<typeof mergeBindings>[1]),
   { enablePointerLook: true },
 )
 const sceneModule = new DboxSceneModule({
