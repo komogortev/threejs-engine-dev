@@ -34,10 +34,10 @@ export const dboxScene: SceneDescriptor = (() => {
     pruneExtraSkinnedMeshes: true,
     rotationY: base?.rotationY ?? Math.PI / 2,
     terrainFootprintRadius: 0.22,
-    // dfist_base.glb needs embedded locomotion clips for the rig to animate.
-    // A game-asset pack URL must NOT live in the harness descriptor — the harness has
-    // no guaranteed access to three-dreams/public in production builds.
-    animationClipUrls: [],
+    // Harness-owned copy of the shared GLB locomotion pack.
+    // Copied from three-dreams/public — see player capability contracts note in roadmap.
+    animationClipUrls: ['/characters/npc/animations_base.glb'],
+    locomotionClipIndices: { idleStand: 4, walkFwdStand: 6, runFwdStand: 3 },
   }
 
   return d
