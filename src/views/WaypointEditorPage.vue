@@ -20,7 +20,8 @@
       export-name="ROAD_WAYPOINTS"
     />
 
-    <button class="back-btn" @click="router.push('/')">← Back</button>
+    <button class="back-btn editor-btn" @click="router.push('/editor')">← Scene Editor</button>
+    <button class="back-btn" @click="router.push('/')">← Menu</button>
   </div>
 </template>
 
@@ -37,6 +38,10 @@ const router = useRouter()
   width: 100%;
   height: 100vh;
   overflow: hidden;
+}
+
+.editor-btn {
+  right: 120px;
 }
 
 .back-btn {

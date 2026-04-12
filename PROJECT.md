@@ -13,7 +13,40 @@ A complete, playable dev playground where any `@base` Three.js package can be au
 
 ## Current Milestone
 
-**Phase 3d** — Camera strategy switching in the editor: allow a level author to walk the scene as the player character under third-person and first-person camera strategies simultaneously, without baking camera mode switching into player gameplay code.
+**Phase 3d — Harmonization & Sign-off**
+
+Goal: align harness and game fork patterns, finalize camera architecture, close the gate that blocks three-dreams Phase 4C. Emphasis on solid foundation over speed.
+
+## Harmonized Plan (2026-04-12)
+
+Work is organized in three tracks. Critical path unblocks the game fork; foundation track strengthens shared infrastructure; the dbox track is exploratory prototyping.
+
+### Critical Path (unblocks Phase 4C)
+
+| # | Target | Est. | Status |
+|---|--------|------|--------|
+| 1 | Harness scene editor harmonization — `SceneEditorPage.vue` → scenes prop + sandbox + registry | 1 session, 2-3 files | Pending |
+| 2 | Camera architecture review + documentation — formalize strategy switching, document decisions | 1 session | Pending |
+| 3 | Phase 3d sign-off — gate review, unblock three-dreams Phase 4C | — | Blocked on 1-2 |
+
+### Foundation Track (parallel, not blocking)
+
+| # | Target | Est. | Status |
+|---|--------|------|--------|
+| 4 | GameplaySceneModule refactor — both harness and three-dreams use shared base cleanly | 1 session, ~10 files | Pending |
+| 5 | Input settings page — shared remapping UI, gamepad config, sensitivity/deadzone | 1 session | Pending |
+| 6 | Camera-relative movement (`movementBasis: 'camera'`) | 1 session | Deferred |
+
+### Dbox Track (exploratory, low priority)
+
+| # | Target | Status |
+|---|--------|--------|
+| 7 | Punch respects NPC lock | Optional |
+| 8 | Slam interacts with blobs | Optional |
+
+### Sequencing Principle
+
+Steady progress on solid foundations. Each session should leave the codebase cleaner than it started. No rushing to close the gate — the gate closes when the foundation is right.
 
 ## V1 Scope
 
@@ -24,6 +57,7 @@ A complete, playable dev playground where any `@base` Three.js package can be au
 - Scene descriptor / editor workflow (`SceneDescriptor` → `SceneBuilder` → `EditorSceneModule`)
 - Third-person orbit camera (`facingLerpThirdPerson`, camera orbit via mouse/gamepad)
 - Swimming v1: `water` PlayerMode, tread/swim animation slots, `SwimmableVolume` descriptor
+- Dbox locomotion lab: OW1-tuned abilities, NPC blob interactions
 
 **Out of scope for v1:**
 - Game logic, narrative, or win conditions (lives in game forks)

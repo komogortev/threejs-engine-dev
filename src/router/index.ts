@@ -30,6 +30,11 @@ export const router = createRouter({
       component: () => import('@/views/SceneEditorPage.vue'),
     },
     {
+      path: '/waypoints',
+      name: 'waypoints',
+      component: () => import('@/views/WaypointEditorPage.vue'),
+    },
+    {
       path: '/sandbox',
       name: 'sandbox',
       component: () => import('@/views/SandboxView.vue'),
@@ -43,11 +48,6 @@ export const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
-    },
-    {
-      path: '/waypoints',
-      name: 'waypoints',
-      component: () => import('@/views/WaypointEditorPage.vue'),
     },
     {
       path: '/:pathMatch(.*)*',
