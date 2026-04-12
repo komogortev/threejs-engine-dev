@@ -59,7 +59,7 @@ export const sandboxScene: SceneDescriptor = {
     modelScale: 1,
     modelFitHeight: 1.78,
     pruneExtraSkinnedMeshes: false,
-    rotationY: Math.PI,
+    rotationY: Math.PI / 2,
     animationClipUrls: [...MIXAMO_FBX_CLIP_URLS],
   },
 

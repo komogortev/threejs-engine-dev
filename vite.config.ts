@@ -120,6 +120,11 @@ export default defineConfig(({ mode }) => {
          */
         '@base/player-three': resolve(sharedRoot, 'packages/player-three/src/index.ts'),
         /**
+         * @base/input — use source in dev so new `ButtonAction` keys / `KeyboardProvider`
+         * bindings are not stuck behind a stale `dist/` (Q/E abilities would not emit).
+         */
+        '@base/input': resolve(sharedRoot, 'packages/input/src/index.ts'),
+        /**
          * @base/ui ships Vue SFCs — resolve from source so Vite processes them
          * with @vitejs/plugin-vue instead of loading a pre-built dist.
          */
@@ -133,7 +138,7 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['three', '@base/threejs-engine'],
-      exclude: ['@base/player-three', '@base/ui'],
+      exclude: ['@base/player-three', '@base/ui', '@base/input'],
     },
   }
 })

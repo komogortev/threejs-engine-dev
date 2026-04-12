@@ -219,6 +219,7 @@ onUnmounted(async () => {
 
       <button class="nav-btn" @click="router.push('/')">← Menu</button>
       <button class="nav-btn" @click="router.push('/sandbox')">Sandbox</button>
+      <button class="nav-btn" @click="router.push('/waypoints')">Waypoints</button>
 
       <div class="w-px h-5 bg-white/10" />
 

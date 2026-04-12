@@ -1,99 +1,16 @@
 import * as THREE from 'three'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
-import type { TerrainSurfaceSampler } from '@base/player-three'
+import {
+  CALIBRATION_OBSTACLES,
+  CALIBRATION_PLATFORMS,
+  CALIBRATION_POOL,
+  CalibrationTerrainSampler,
+  type CalibrationObstacleDef,
+  type CalibrationPlatformDef,
+} from '@/calibration/calibrationLayout'
 import { ThirdPersonSceneModule, type ThirdPersonSceneConfig } from './GameplaySceneModule'
 import type { SceneDescriptor } from '@base/scene-builder'
-
-// ─── Hard-geometry definitions ─────────────────────────────────────────────────
-
-interface PlatformDef {
-  label: string
-  color: number
-  cx: number          // X centre of platform
-  rampStartZ: number  // Z where ramp begins (ground level)
-  rampEndZ: number    // Z where ramp ends / flat top begins (at height)
-  topEndZ: number     // Z where the flat top ends (fall-off edge)
-  width: number       // X extent
-  height: number      // Peak height in metres
-}
-
-interface ObstacleDef {
-  label: string
-  color: number
-  cx: number
-  cz: number
-  width: number   // X extent
-  depth: number   // Z extent
-  height: number
-}
-
-interface PoolDef {
-  minX: number; maxX: number
-  minZ: number; maxZ: number   // minZ = north (deep end), maxZ = south (shallow entry from ground)
-  surfaceY: number             // floor Y at maxZ (south, shallow — character walks in here)
-  depthY: number               // floor Y at minZ (north, deepest end)
-}
-
-// ─── Sandbox layout ────────────────────────────────────────────────────────────
-//
-// All ramps are PARALLEL — side by side along X, base at z=+20 (south), ascending
-// northward (decreasing Z).  Ramp length = height × 2 → ≈ 26.6° slope, comfortably
-// under the default maxWalkableSlopeDeg (35°).  All geometry stays within the 50 m
-// terrain radius.  Character spawns at [0, 30] (south of all ramp bases).
-
-const PLATFORMS: PlatformDef[] = [
-  { label: 'soft',     color: 0x22d3ee, cx: -27, rampStartZ: 20, rampEndZ: 16,  topEndZ: 12,  width: 5, height: 2  },
-  { label: 'medium',   color: 0x84cc16, cx: -20, rampStartZ: 20, rampEndZ: 12,  topEndZ: 8,   width: 5, height: 4  },
-  { label: 'hard',     color: 0xfbbf24, cx: -13, rampStartZ: 20, rampEndZ: 6,   topEndZ: 2,   width: 5, height: 7  },
-  { label: 'critical', color: 0xf97316, cx: -6,  rampStartZ: 20, rampEndZ: -2,  topEndZ: -6,  width: 5, height: 11 },
-  { label: 'fatal',    color: 0xef4444, cx: 1,   rampStartZ: 20, rampEndZ: -24, topEndZ: -28, width: 5, height: 22 },
-]
-
-const OBSTACLES: ObstacleDef[] = [
-  { label: 'knee (0.5 m)', color: 0xa78bfa, cx: 5, cz: -5, width: 2, depth: 0.5, height: 0.5 },
-  { label: 'body (1.8 m)', color: 0xc084fc, cx: 9, cz: -5, width: 2, depth: 0.5, height: 1.8 },
-]
-
-const POOL: PoolDef = { minX: 15, maxX: 25, minZ: -25, maxZ: 25, surfaceY: 0, depthY: -25 }
-
-// ─── Custom terrain sampler ────────────────────────────────────────────────────
-
-/** Flat-base sampler overridden with hard-edged platform/obstacle/pool heights. */
-class SandboxSampler implements TerrainSurfaceSampler {
-  sample(x: number, z: number): number {
-    // Pool floor takes priority (can go below 0).
-    // south end (maxZ=25, near character start) = shallow (surfaceY=0),
-    // north end (minZ=-25) = deep (depthY=-25).  t=0 at south, t=1 at north.
-    if (x >= POOL.minX && x <= POOL.maxX && z >= POOL.minZ && z <= POOL.maxZ) {
-      const t = (POOL.maxZ - z) / (POOL.maxZ - POOL.minZ)
-      return POOL.surfaceY + (POOL.depthY - POOL.surfaceY) * t
-    }
-    let h = 0
-    for (const p of PLATFORMS) h = Math.max(h, platformSample(x, z, p))
-    for (const o of OBSTACLES)  h = Math.max(h, obstacleSample(x, z, o))
-    return h
-  }
-}
-
-function platformSample(x: number, z: number, p: PlatformDef): number {
-  const hw = p.width / 2
-  if (x < p.cx - hw || x > p.cx + hw) return 0
-  // rampStartZ (south, +Z) > rampEndZ (north, −Z): ramp ascends as z decreases.
-  if (z <= p.rampStartZ && z > p.rampEndZ) {
-    return p.height * (p.rampStartZ - z) / (p.rampStartZ - p.rampEndZ)
-  }
-  if (z <= p.rampEndZ && z >= p.topEndZ) return p.height
-  return 0
-}
-
-function obstacleSample(x: number, z: number, o: ObstacleDef): number {
-  if (x >= o.cx - o.width / 2 && x <= o.cx + o.width / 2 &&
-      z >= o.cz - o.depth / 2 && z <= o.cz + o.depth / 2) {
-    return o.height
-  }
-  return 0
-}
 
 // ─── Module ────────────────────────────────────────────────────────────────────
 
@@ -111,7 +28,7 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
 
   protected override async onMount(container: HTMLElement, context: EngineContext): Promise<void> {
     await super.onMount(container, context)
-    this.setSampler(new SandboxSampler())
+    this.setSampler(new CalibrationTerrainSampler())
     const ctx = context as ThreeContext
     this.buildSandboxGeometry(ctx.scene)
   }
@@ -126,8 +43,8 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
 
   private buildSandboxGeometry(scene: THREE.Scene): void {
     this.addGrid(scene)
-    for (const p of PLATFORMS) this.addPlatform(scene, p)
-    for (const o of OBSTACLES)  this.addObstacle(scene, o)
+    for (const p of CALIBRATION_PLATFORMS) this.addPlatform(scene, p)
+    for (const o of CALIBRATION_OBSTACLES) this.addObstacle(scene, o)
     this.addPool(scene)
   }
 
@@ -156,7 +73,7 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
 
   // ── Platforms: wedge ramp + flat top ───────────────────────────────────────
 
-  private addPlatform(scene: THREE.Scene, p: PlatformDef): void {
+  private addPlatform(scene: THREE.Scene, p: CalibrationPlatformDef): void {
     const mat = new THREE.MeshStandardMaterial({
       color: p.color, roughness: 0.55, metalness: 0.05,
       transparent: true, opacity: 0.88,
@@ -209,7 +126,7 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
 
   // ── Obstacles: solid boxes ──────────────────────────────────────────────────
 
-  private addObstacle(scene: THREE.Scene, o: ObstacleDef): void {
+  private addObstacle(scene: THREE.Scene, o: CalibrationObstacleDef): void {
     const mat = new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.5, metalness: 0.05 })
     const geo  = new THREE.BoxGeometry(o.width, o.height, o.depth)
     const box  = new THREE.Mesh(geo, mat)
@@ -226,11 +143,11 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
   // ── Pool: 3 hard walls + sloped floor ──────────────────────────────────────
 
   private addPool(scene: THREE.Scene): void {
-    const w = POOL.maxX - POOL.minX     // 10 m
-    const l = POOL.maxZ - POOL.minZ     // 50 m
-    const d = Math.abs(POOL.depthY)     // 25 m (max depth)
-    const mx = (POOL.minX + POOL.maxX) / 2
-    const mz = (POOL.minZ + POOL.maxZ) / 2
+    const w = CALIBRATION_POOL.maxX - CALIBRATION_POOL.minX     // 10 m
+    const l = CALIBRATION_POOL.maxZ - CALIBRATION_POOL.minZ     // 50 m
+    const d = Math.abs(CALIBRATION_POOL.depthY)     // 25 m (max depth)
+    const mx = (CALIBRATION_POOL.minX + CALIBRATION_POOL.maxX) / 2
+    const mz = (CALIBRATION_POOL.minZ + CALIBRATION_POOL.maxZ) / 2
 
     const wallMat  = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.7, metalness: 0.1 })
     const wireMat  = new THREE.LineBasicMaterial({ color: 0x38bdf8 })
@@ -247,10 +164,10 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
       this.sandboxMeshes.push(wm)
     }
 
-    addWall(new THREE.BoxGeometry(0.4, d, l), POOL.minX - 0.2, -d / 2, mz)  // west
-    addWall(new THREE.BoxGeometry(0.4, d, l), POOL.maxX + 0.2, -d / 2, mz)  // east
+    addWall(new THREE.BoxGeometry(0.4, d, l), CALIBRATION_POOL.minX - 0.2, -d / 2, mz)  // west
+    addWall(new THREE.BoxGeometry(0.4, d, l), CALIBRATION_POOL.maxX + 0.2, -d / 2, mz)  // east
     // North wall (z = minZ = −25) — deep end; south (maxZ=25) is open entry from ground level.
-    addWall(new THREE.BoxGeometry(w, d, 0.4), mx, -d / 2, POOL.minZ - 0.2)
+    addWall(new THREE.BoxGeometry(w, d, 0.4), mx, -d / 2, CALIBRATION_POOL.minZ - 0.2)
 
     // Sloped floor: shallow at south (maxZ, Y=0), deep at north (minZ, Y=−25).
     // rotation.x = −(π/2 + slopeAngle) tilts the +Z edge (south) UP and −Z edge (north) DOWN.
@@ -259,7 +176,7 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
     const floorGeo = new THREE.PlaneGeometry(w, hypotenuse, 1, 20)
     const floorMesh = new THREE.Mesh(floorGeo, floorMat)
     floorMesh.rotation.x = -(Math.PI / 2 + slopeAngle)
-    floorMesh.position.set(mx, (POOL.surfaceY + POOL.depthY) / 2, mz)
+    floorMesh.position.set(mx, (CALIBRATION_POOL.surfaceY + CALIBRATION_POOL.depthY) / 2, mz)
     scene.add(floorMesh)
     this.sandboxMeshes.push(floorMesh)
 
@@ -271,15 +188,15 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
       depthWrite: false,
     }))
     waterMesh.rotation.x = -Math.PI / 2
-    waterMesh.position.set(mx, POOL.surfaceY + 0.02, mz)
+    waterMesh.position.set(mx, CALIBRATION_POOL.surfaceY + 0.02, mz)
     scene.add(waterMesh)
     this.sandboxMeshes.push(waterMesh)
 
     // Pool XZ perimeter line at water surface for visual clarity
     const corners: [number, number][] = [
-      [POOL.minX, POOL.minZ], [POOL.maxX, POOL.minZ],
-      [POOL.maxX, POOL.maxZ], [POOL.minX, POOL.maxZ],
-      [POOL.minX, POOL.minZ],
+      [CALIBRATION_POOL.minX, CALIBRATION_POOL.minZ], [CALIBRATION_POOL.maxX, CALIBRATION_POOL.minZ],
+      [CALIBRATION_POOL.maxX, CALIBRATION_POOL.maxZ], [CALIBRATION_POOL.minX, CALIBRATION_POOL.maxZ],
+      [CALIBRATION_POOL.minX, CALIBRATION_POOL.minZ],
     ]
     const pts: number[] = []
     for (const [cx, cz] of corners) pts.push(cx, 0.05, cz)
@@ -292,11 +209,11 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
     // Depth tick lines on pool floor (every 5 m) — south=shallow, north=deep.
     for (let i = 0; i <= 5; i++) {
       const t  = i / 5                                            // 0 = south (maxZ), 1 = north (minZ)
-      const fz = POOL.maxZ - l * t                               // z decreasing northward
-      const fy = POOL.surfaceY + (POOL.depthY - POOL.surfaceY) * t  // 0 at south, −25 at north
+      const fz = CALIBRATION_POOL.maxZ - l * t                               // z decreasing northward
+      const fy = CALIBRATION_POOL.surfaceY + (CALIBRATION_POOL.depthY - CALIBRATION_POOL.surfaceY) * t  // 0 at south, −25 at north
       const tickGeo = new THREE.BufferGeometry()
       tickGeo.setAttribute('position', new THREE.BufferAttribute(
-        new Float32Array([POOL.minX, fy + 0.04, fz, POOL.maxX, fy + 0.04, fz]), 3,
+        new Float32Array([CALIBRATION_POOL.minX, fy + 0.04, fz, CALIBRATION_POOL.maxX, fy + 0.04, fz]), 3,
       ))
       const c = new THREE.Color().setHSL(0.55, 0.8, 0.72 - t * 0.4)
       scene.add(new THREE.Line(tickGeo, new THREE.LineBasicMaterial({ color: c })))
