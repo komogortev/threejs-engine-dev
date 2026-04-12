@@ -560,7 +560,9 @@ export class GameplaySceneModule extends BaseModule {
       if (e.action !== 'jump') return
       if (e.type === 'pressed') {
         this.jumpHeld = true
-        this.player.notifyJumpPressed()
+        if (!this.handleJumpPressedEarly()) {
+          this.player.notifyJumpPressed()
+        }
       } else if (e.type === 'released') {
         this.jumpHeld = false
         if (this.secretSecondJumpTriggered) {
@@ -684,6 +686,8 @@ export class GameplaySceneModule extends BaseModule {
       this.lookPitchAcc = 0
     }
 
+    this.onBeforeGameplayTick(simDelta, ctx)
+
     const isThirdPerson = this.gameplayCam.getMode() === 'third-person'
     this.player.tick(simDelta, {
       camera: ctx.camera,
@@ -736,10 +740,25 @@ export class GameplaySceneModule extends BaseModule {
   }
 
   /**
+   * Runs **before** {@link PlayerController.tick} each frame (same `simDelta` as the player).
+   * Use for impulses that must apply before gravity / terrain integration in the same step
+   * (e.g. dbox pending rocket punch).
+   */
+  protected onBeforeGameplayTick(_simDelta: number, _ctx: ThreeContext): void {}
+
+  /**
    * Runs at the end of each gameplay tick after camera update, using the same `simDelta`
    * as the player (slow-mo / fall dilation included). Subclasses use for lightweight props / NPCs.
    */
   protected onAfterGameplayTick(_simDelta: number, _ctx: ThreeContext): void {}
+
+  /**
+   * Jump `pressed` hook before {@link PlayerController.notifyJumpPressed} sets the buffer.
+   * Return `true` when the press is fully handled (e.g. dbox rocket-punch skim jump).
+   */
+  protected handleJumpPressedEarly(): boolean {
+    return false
+  }
 
   private canUseSecretExtraJumpNow(): boolean {
     return (
