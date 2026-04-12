@@ -6,32 +6,44 @@ alwaysApply: true
 # threejs-engine-dev — Workspace Context
 
 ## Role of This Project
-This is the **Phase 2 dev harness** for `@base/threejs-engine`. It is a fork of `pwa-shell` used to validate the Three.js engine module before it is consumed by the first game fork.
 
-It will become the starting point for **Phase 4** (first game fork) — game-specific modules will be added here once the engine layer is stable.
+This is the **permanent Three.js dev harness** for all `@base` Three.js infrastructure packages. It validates `@base/player-three`, `@base/scene-builder`, `@base/camera-three`, and `@base/threejs-engine` before they are consumed by game forks. It is **not** promoted to a package — it remains a permanent integration harness.
+
+**Current phase: 3d** — Camera strategy switching in the scene editor (third-person ↔ first-person in editor play-sim without touching game code).
 
 ## Ecosystem Topology
+
 ```
 e:/Projects/
   BASE/pwa-shell/             ← shell template this was forked from
   SHARED/packages/
     engine-core/              ← @base/engine-core (linked locally)
     threejs-engine/           ← @base/threejs-engine (linked locally)
-  threejs-engine-dev/         ← THIS repo — Three.js engine dev harness
+    player-three/             ← @base/player-three (linked locally)
+    scene-builder/            ← @base/scene-builder (linked locally)
+    camera-three/             ← @base/camera-three (linked locally)
+    input/                    ← @base/input (linked locally)
+    audio/                    ← @base/audio (linked locally)
+  threejs-engine-dev/         ← THIS repo
+  three-dreams/               ← Phase 4 game fork (sibling — Phase 4C blocked on Phase 3d)
 ```
 
-## What This Harness Validates
-- ThreeModule mounts correctly into ModuleMount slot
-- SpinningCubeModule mounts as a child and receives ThreeContext
-- registerSystem() drives per-frame rotation
-- entity:state-change events fire on setState()
-- Navigating away unmounts cleanly with no Three.js disposal warnings
+## What This Harness Validates (Phase 3d)
+
+- **Player locomotion:** grounded, airborne, water, recovery states via `@base/player-three`
+- **Mixamo FBX pipeline:** semantic clip resolution, overlay system, `CharacterAnimationRig`
+- **Scene authoring:** `SceneDescriptor` → `SceneBuilder` → `EditorSceneModule`
+- **Swimming v1:** `SwimmableVolume`, tread/swim animation slots, shoulder-depth trigger
+- **Camera strategies (Phase 3d):** third-person orbit + first-person eye-attach in editor play-sim
 
 ## Code Placement Rules
-- Engine improvements → `SHARED/packages/threejs-engine/`
+
+- Engine/package improvements → `SHARED/packages/<name>/`
+- Scene authoring tools and harness scenes → `src/` in this repo
+- Game-specific logic (rules, narrative) → `three-dreams/` — not here
 - Shell improvements → `BASE/pwa-shell/`
-- Game-specific logic (Phase 4+) → stays in this fork
 
 ## Stack
+
 Vue 3 · TypeScript strict · Tailwind CSS · Vue Router · Pinia · Vite
-Three.js via `@base/threejs-engine` · locally linked `@base/engine-core`
+Three.js · `@base/threejs-engine` · `@base/player-three` · `@base/scene-builder` · `@base/camera-three` · `@base/input` · `@base/audio`

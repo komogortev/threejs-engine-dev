@@ -25,14 +25,29 @@ export const router = createRouter({
       component: () => import('@/views/EditorView.vue'),
     },
     {
+      path: '/scene-editor',
+      name: 'scene-editor',
+      component: () => import('@/views/SceneEditorPage.vue'),
+    },
+    {
       path: '/sandbox',
       name: 'sandbox',
       component: () => import('@/views/SandboxView.vue'),
     },
     {
+      path: '/dbox',
+      name: 'dbox',
+      component: () => import('@/views/DboxView.vue'),
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
+    },
+    {
+      path: '/waypoints',
+      name: 'waypoints',
+      component: () => import('@/views/WaypointEditorPage.vue'),
     },
     {
       path: '/:pathMatch(.*)*',

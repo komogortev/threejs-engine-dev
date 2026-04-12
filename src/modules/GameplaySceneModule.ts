@@ -92,6 +92,11 @@ export interface GameplaySceneConfig {
   /** Log resolved animation clip names on CharacterAnimationRig init. */
   debugClipResolution?: boolean
   /**
+   * Exponential decay (per second) for {@link PlayerController} planar carry velocity (ability bursts).
+   * When omitted, the package default applies.
+   */
+  carryImpulseDecayPerSecond?: number
+  /**
    * Navigation / collision mesh that replaces the procedural `TerrainSampler`.
    * Load a GLB whose meshes represent the exact walkable surfaces (ground, roads, rooftops).
    * The mesh is placed with the same transform as the visual GLB so physics aligns.
@@ -362,6 +367,9 @@ export class GameplaySceneModule extends BaseModule {
       debugJumpArc: this.cfg.debugJumpArc,
       maxWalkableSlopeDeg: this.cfg.maxWalkableSlopeDeg,
       cliffDropCatchThreshold: this.cfg.cliffDropCatchThreshold,
+      ...(this.cfg.carryImpulseDecayPerSecond !== undefined
+        ? { carryImpulseDecayPerSecond: this.cfg.carryImpulseDecayPerSecond }
+        : {}),
       extraJumps: 1,
       canUseExtraJump: () => this.canUseSecretExtraJumpNow(),
     })
@@ -374,6 +382,16 @@ export class GameplaySceneModule extends BaseModule {
 
   getPlayerController(): PlayerController {
     return this.player
+  }
+
+  /** Terrain surface Y at world XZ (feet level); `0` when no sampler yet. */
+  protected sampleTerrainSurfaceY(x: number, z: number): number {
+    return this.sampler?.sample(x, z) ?? 0
+  }
+
+  /** Mounted character root (same object passed into {@link PlayerController.tick}). */
+  getCharacter(): THREE.Object3D {
+    return this.character
   }
 
   getCameraPreset(): ThirdPersonCameraPreset {
@@ -542,7 +560,9 @@ export class GameplaySceneModule extends BaseModule {
       if (e.action !== 'jump') return
       if (e.type === 'pressed') {
         this.jumpHeld = true
-        this.player.notifyJumpPressed()
+        if (!this.handleJumpPressedEarly()) {
+          this.player.notifyJumpPressed()
+        }
       } else if (e.type === 'released') {
         this.jumpHeld = false
         if (this.secretSecondJumpTriggered) {
@@ -666,6 +686,8 @@ export class GameplaySceneModule extends BaseModule {
       this.lookPitchAcc = 0
     }
 
+    this.onBeforeGameplayTick(simDelta, ctx)
+
     const isThirdPerson = this.gameplayCam.getMode() === 'third-person'
     this.player.tick(simDelta, {
       camera: ctx.camera,
@@ -714,6 +736,28 @@ export class GameplaySceneModule extends BaseModule {
       this.player.getCrouchGroundBlend(),
       fpMode ? this.fpPitch : 0,
     )
+    this.onAfterGameplayTick(simDelta, ctx)
+  }
+
+  /**
+   * Runs **before** {@link PlayerController.tick} each frame (same `simDelta` as the player).
+   * Use for impulses that must apply before gravity / terrain integration in the same step
+   * (e.g. dbox pending rocket punch).
+   */
+  protected onBeforeGameplayTick(_simDelta: number, _ctx: ThreeContext): void {}
+
+  /**
+   * Runs at the end of each gameplay tick after camera update, using the same `simDelta`
+   * as the player (slow-mo / fall dilation included). Subclasses use for lightweight props / NPCs.
+   */
+  protected onAfterGameplayTick(_simDelta: number, _ctx: ThreeContext): void {}
+
+  /**
+   * Jump `pressed` hook before {@link PlayerController.notifyJumpPressed} sets the buffer.
+   * Return `true` when the press is fully handled (e.g. dbox rocket-punch skim jump).
+   */
+  protected handleJumpPressedEarly(): boolean {
+    return false
   }
 
   private canUseSecretExtraJumpNow(): boolean {

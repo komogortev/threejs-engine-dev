@@ -1,5 +1,5 @@
-import { copyFileSync, existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { copyFileSync, createReadStream, existsSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
@@ -12,6 +12,45 @@ function viteBase(): string {
   if (p == null || p === '' || p === '/') return '/'
   const lead = p.startsWith('/') ? p : `/${p}`
   return lead.endsWith('/') ? lead : `${lead}/`
+}
+
+/**
+ * Serve static assets from a second public directory (the game fork's public/).
+ * Vite only supports one publicDir natively; this middleware fills the gap in dev.
+ * Requests that match a file in fallbackDir are served directly — only affects dev server.
+ */
+function gamePublicFallback(fallbackDir: string): Plugin {
+  const MIME: Record<string, string> = {
+    glb: 'model/gltf-binary',
+    gltf: 'model/gltf+json',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    webp: 'image/webp',
+    json: 'application/json',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+  }
+  return {
+    name: 'game-public-fallback',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url) return next()
+        const url = req.url.split('?')[0].split('#')[0]
+        // Skip Vite internals, HTML, and source files
+        if (url.startsWith('/@') || url === '/' || url.endsWith('.html') || url.endsWith('.ts') || url.endsWith('.vue')) return next()
+        const filePath = join(fallbackDir, url)
+        if (existsSync(filePath) && statSync(filePath).isFile()) {
+          const ext = url.split('.').pop() ?? ''
+          res.setHeader('Content-Type', MIME[ext] ?? 'application/octet-stream')
+          res.setHeader('Cache-Control', 'no-cache')
+          createReadStream(filePath).pipe(res)
+          return
+        }
+        next()
+      })
+    },
+  }
 }
 
 /** GitHub Pages serves 404 for unknown paths; copy index.html so Vue Router can boot on refresh. */
@@ -37,11 +76,14 @@ export default defineConfig(({ mode }) => {
   /** App root (threejs-engine-dev/). Linked `@base/*` packages resolve under ../SHARED. */
   const appRoot = fileURLToPath(new URL('.', import.meta.url))
   const sharedRoot = resolve(appRoot, '../SHARED')
+  /** three-dreams/public — scene editor serves game assets via dev middleware */
+  const gameForkPublic = resolve(appRoot, '../three-dreams/public')
 
   return {
     base,
     plugins: [
       vue(),
+      gamePublicFallback(gameForkPublic),
       !disablePwa &&
         mode !== 'electron' &&
         VitePWA({
@@ -77,16 +119,21 @@ export default defineConfig(({ mode }) => {
          * `@fs/` URLs for the package's `assets/` directory.
          */
         '@base/player-three': resolve(sharedRoot, 'packages/player-three/src/index.ts'),
+        /**
+         * @base/ui ships Vue SFCs — resolve from source so Vite processes them
+         * with @vitejs/plugin-vue instead of loading a pre-built dist.
+         */
+        '@base/ui': resolve(sharedRoot, 'packages/ui/src/index.ts'),
       },
     },
     server: {
       fs: {
-        allow: [appRoot, sharedRoot],
+        allow: [appRoot, sharedRoot, gameForkPublic],
       },
     },
     optimizeDeps: {
       include: ['three', '@base/threejs-engine'],
-      exclude: ['@base/player-three'],
+      exclude: ['@base/player-three', '@base/ui'],
     },
   }
 })

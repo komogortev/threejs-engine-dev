@@ -29,6 +29,9 @@ importers:
       '@base/threejs-engine':
         specifier: link:../SHARED/packages/threejs-engine
         version: link:../SHARED/packages/threejs-engine
+      '@base/ui':
+        specifier: link:../SHARED/packages/ui
+        version: link:../SHARED/packages/ui
       pinia:
         specifier: ^2.2.0
         version: 2.3.1(typescript@5.9.3)(vue@3.5.30(typescript@5.9.3))
