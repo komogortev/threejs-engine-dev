@@ -32,7 +32,7 @@ export const dboxScene: SceneDescriptor = (() => {
     modelScale: base?.modelScale ?? 1,
     modelFitHeight: base?.modelFitHeight ?? 1.78,
     pruneExtraSkinnedMeshes: true,
-    rotationY: base?.rotationY ?? Math.PI,
+    rotationY: base?.rotationY ?? Math.PI / 2,
     terrainFootprintRadius: 0.22,
     /** Only clips inside `dfist_base.glb` — no Remy / Mixamo FBX sidecars. */
     animationClipUrls: [],
