@@ -31,6 +31,12 @@ const router = useRouter()
         Sandbox
       </button>
       <button
+        class="w-full px-6 py-3 bg-cyan-900 hover:bg-cyan-800 active:bg-cyan-950 text-cyan-100 text-sm font-semibold rounded-xl transition-colors"
+        @click="router.push('/dbox')"
+      >
+        Dbox (locomotion lab)
+      </button>
+      <button
         class="w-full px-6 py-3 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-white text-sm font-semibold rounded-xl transition-colors"
         @click="router.push('/game')"
       >

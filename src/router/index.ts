@@ -35,6 +35,11 @@ export const router = createRouter({
       component: () => import('@/views/SandboxView.vue'),
     },
     {
+      path: '/dbox',
+      name: 'dbox',
+      component: () => import('@/views/DboxView.vue'),
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

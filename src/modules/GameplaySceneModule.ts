@@ -376,6 +376,11 @@ export class GameplaySceneModule extends BaseModule {
     return this.player
   }
 
+  /** Mounted character root (same object passed into {@link PlayerController.tick}). */
+  getCharacter(): THREE.Object3D {
+    return this.character
+  }
+
   getCameraPreset(): ThirdPersonCameraPreset {
     return this.gameplayCam.getCameraPreset()
   }
