@@ -34,8 +34,10 @@ export const dboxScene: SceneDescriptor = (() => {
     pruneExtraSkinnedMeshes: true,
     rotationY: base?.rotationY ?? Math.PI / 2,
     terrainFootprintRadius: 0.22,
-    /** Only clips inside `dfist_base.glb` — no Remy / Mixamo FBX sidecars. */
-    animationClipUrls: [],
+    // Harness-owned copy of the shared GLB locomotion pack.
+    // Copied from three-dreams/public — see player capability contracts note in roadmap.
+    animationClipUrls: ['/characters/npc/animations_base.glb'],
+    locomotionClipIndices: { idleStand: 4, walkFwdStand: 6, runFwdStand: 3 },
   }
 
   return d
