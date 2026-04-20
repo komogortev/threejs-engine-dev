@@ -33,16 +33,21 @@ Work is organized in three tracks. Critical path unblocks the game fork; foundat
 
 | # | Target | Est. | Status |
 |---|--------|------|--------|
-| 4 | GameplaySceneModule refactor — both harness and three-dreams use shared base cleanly | 1 session, ~10 files | Pending |
-| 5 | Input settings page — shared remapping UI, gamepad config, sensitivity/deadzone | 1 session | Pending |
-| 6 | Camera-relative movement (`movementBasis: 'camera'`) | 1 session | Deferred |
+| 4 | Gameplay harmonization — PlayerCameraCoordinator, tickPlayer/tickCamera split | 1 session | **Done** (2026-04-12) |
+| 5 | Input settings page — click-to-rebind, 4-ability slots, mouse button rebinding | 1 session | **Done** (2026-04-12) |
+| 6 | Scene editor extraction to @base/ui — SceneEditorView, multi-scene switcher | 1 session | **Done** (2026-04-10) |
+| 7 | Waypoint editor to @base/ui — WaypointEditor composable, view, HUD, panel | 1 session | **Done** (2026-04-10) |
+| 8 | NPC animation pack system — animationPackUrls, NpcGltfEntry, mixer lifecycle | 1 session | **Done** (2026-04-05) |
+| 9 | Player ability locomotion hooks — rocket punch carry, skim jump, vertical impulse | 1 session | **Done** (2026-04-11) |
+| 10 | GameplaySceneModule refactor — both harness and three-dreams use shared base cleanly | 1 session, ~10 files | Pending |
+| 11 | Camera-relative movement (`movementBasis: 'camera'`) | 1 session | Deferred |
 
-### Dbox Track (exploratory, low priority)
+### Dbox Track (extracted to three-dbox 2026-04-12)
 
 | # | Target | Status |
 |---|--------|--------|
-| 7 | Punch respects NPC lock | Optional |
-| 8 | Slam interacts with blobs | Optional |
+| 12 | Punch respects NPC lock | Moved to three-dbox |
+| 13 | Slam interacts with blobs | Moved to three-dbox |
 
 ### Sequencing Principle
 
