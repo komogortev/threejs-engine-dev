@@ -1,17 +1,17 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: 3d Complete | Last: 2026-04-13 | Stack: Vue 3 + @base Three.js harness
-Working: Player locomotion (ground/air/water), third-person camera, sandbox ramps, swimming v1; scene editor on `scenes` prop pattern (registry + configs); gameplay harmonization (PlayerCameraCoordinator, tickPlayer/tickCamera); input settings (`/settings`) with click-to-rebind, 4-ability slots, mouse button rebinding; dbox locomotion lab retained at `/dbox` (extracted to standalone three-dbox project)
+Phase: Phase D — D-0 ✅, D-1 next | Last: 2026-05-20 | Stack: Vue 3 + @base Three.js harness
+Working: Phase 3d signed off (2026-04-12). Player locomotion, camera presets, sandbox, settings. **D-0 complete:** menu collapsed to Sandbox · Editor · Settings; dead routes (/game /dbox /scene /scene-editor) removed; GameView/DboxView/SceneView/DboxSceneModule/dbox.ts deleted; Sandbox disabled until saved scene exists (localStorage `sandbox:scene`); legacy `/editor` stays as frozen Phase 4 reference; WaypointEditorPage back link → `/editor`.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: GameplaySceneModule refactor (Foundation #10) — stable, used as test bed for new @base features
+Next: **D-1 — free-float camera** (`'free-float'` added to `GameplayCameraMode` in `@base/camera-three`; WASD+mouse-look pointer-lock; Tab cycles 3p→1p→free-float; player hidden in free-float). three-dreams + three-dbox verified safe (no exhaustive switches on mode type).
 
 ---
 
 ## Status
 
-_Last updated: 2026-04-12_
+_Last updated: 2026-05-20_
 
 **What's working:** Player moves and animates across grounded, airborne, and water states. Sandbox scene has calibration ramps (soft → fatal landing tiers), knee/body-height obstacles, and a pool. Third-person orbit camera functional via mouse/gamepad. Jump arc and clip resolution debug logging available. Swimming v1 wired: `water.tread` and `water.swim.forward` trigger at shoulder depth. Landing severity tiers (soft/medium/hard/critical/fatal) wired to animation slots.
 
@@ -42,21 +42,43 @@ _Last updated: 2026-04-12_
 
 ## Next Session
 
-> **Phase 3d is complete.** Harness is stable. Remaining foundation work:
->
-> ### GameplaySceneModule refactor (Foundation #10)
->
-> Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. Clean up legacy overrides so both sides delegate cleanly to the shared base.
->
-> ### Deferred items (low priority)
->
-> - Swimming clip investigation — verify `water.tread` / `water.swim.forward` with `debugClipResolution`
-> - Camera-relative movement (`movementBasis: 'camera'`) — WASD relative to camera facing in third-person
+> **Phase D demo milestone is planned.** Start with D-0 (route + menu cleanup), then D-1 (free-float camera). T-F7 GLB normalization is pending but deprioritised relative to Phase D. See `docs/roadmap/01-editor-roadmap.md` §Phase D for full sequence and decisions.
+
+### Phase D — Demo milestone (active next)
+
+D-0 → D-1 → D-2 → D-3 → D-4 → D-5 → D-6. See editor roadmap for per-phase detail. Pre-implementation check for D-1: grep `three-dreams` and `three-dbox` for exhaustive switches on `GameplayCameraMode` before adding `'free-float'` to the union.
+
+### T-F7 — GLB Model Normalization (pending)
+
+Design complete (2026-04-19). Cross-pipeline consult with gmod-model-pipeline confirmed approach.
+Full findings + checklist: `docs/T-F7-glb-normalization.md`
+
+**Phase A — Pipeline fix (start here):**
+- Add `center --pivot bottom` pass to `optimize-glb.sh` before meshopt compression
+- Re-optimize existing Tripo GLBs and verify alignment in three-dreams + three-dbox
+
+**Phase B — Runtime fallback in `@base/threejs-engine/AssetLoader.ts`:**
+- `normalizeOrigin?: boolean` option on character load
+- Box3 pivot-wrap + floor-snap; scale-drift detection + warning
+
+**Phase C — Integration validation** (harness sandbox scene + three-dreams)
+
+### GameplaySceneModule refactor (Foundation #10, follow-on)
+
+Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. Clean up legacy overrides so both sides delegate cleanly to the shared base.
+
+### Deferred items (low priority)
+
+- Swimming clip investigation — verify `water.tread` / `water.swim.forward` with `debugClipResolution`
+- Camera-relative movement (`movementBasis: 'camera'`) — WASD relative to camera facing in third-person
 
 ## Decision Log
 
 <!-- Append-only. One line per decision, newest first. -->
 
+- **2026-05-20** — **D-0 complete.** Menu collapsed to Sandbox · Editor · Settings. Dead routes + views deleted (GameView, DboxView, SceneView, DboxSceneModule, dbox.ts). Sandbox button disabled when `sandbox:scene` absent from localStorage. Legacy `/editor` kept as frozen Phase 4 reference. WaypointEditorPage back link corrected to `/editor`. Build clean (5s). three-dreams + three-dbox verified: no exhaustive switches on `GameplayCameraMode` → D-1 safe to implement.
+- **2026-05-20** — **Phase D demo milestone planned.** Menu → Sandbox · Editor · Settings. Engine Test + Dbox removed from engine-dev. Sandbox gated on saved scene. Free-float = WASD+mouse-look (new `'free-float'` in `GameplayCameraMode`). Editor base: `@base/ui` SceneEditorView extended with TransformControls (D-3) + placement pipeline (D-4) + player model with click-select (D-5). Legacy editor frozen as Phase 4 reference. Scatter/atmosphere deferred post-demo. Full plan: `docs/roadmap/01-editor-roadmap.md` §Phase D.
+- **2026-05-20** — **Main menu editor naming.** **Scene Editor** → `/scene-editor` (`SceneEditorPage` / `@base/ui`); **Legacy Editor** → `/editor` (`EditorView` / `EditorSceneModule`) — fixes prior mismatch where the menu label pointed at the legacy route while `/scene-editor` had no entry. `WaypointEditorPage` “← Scene Editor” back button now returns to `/scene-editor`.
 - **2026-04-12** — **Animation harmonization.** Dbox character (`dfist_base.glb`) wired to `animations_base.glb` GLB pack (same path as three-dreams NPC pack, served via `gamePublicFallback`). `SandboxSceneModule` already sets `debugClipResolution: true` — slot resolution logs visible in dbox. Harmonized rule: FBX characters use `MIXAMO_FBX_CLIP_URLS`; GLB characters use GLB animation pack URL.
 - **2026-04-12** — **Camera architecture reviewed (Target 2).** `@base/camera-three` has no blockers for Phase 4C. Cinematic mode is purely additive: `CinematicCameraRig` + `CameraTransitionManager` + `PlayerCameraCoordinator.suspend/resume` — no existing API changes needed. See `SHARED/packages/camera-three/ARCHITECTURE.md`.
 - **2026-04-12** — **Scene editor harmonization complete (Target 1).** Harness `SceneEditorPage.vue` rewritten to use `scenes` prop pattern (mirrors three-dreams). Created `src/scenes/editor/types.ts`, `registry.ts`, `configs.ts`. Also fixed two pre-existing build errors: `DboxView.vue` `mergeBindings` cast (`as unknown as`), and `EditorOrbitBookmark`/`EDITOR_ORBIT_BOOKMARKS`/`EDITOR_ORBIT_LOCOMOTION_IDS` missing from `@base/ui` src exports + `sceneEditorTypes.ts`.

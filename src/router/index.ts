@@ -10,24 +10,9 @@ export const router = createRouter({
       component: () => import('@/views/MenuView.vue'),
     },
     {
-      path: '/game',
-      name: 'game',
-      component: () => import('@/views/GameView.vue'),
-    },
-    {
-      path: '/scene',
-      name: 'scene',
-      component: () => import('@/views/SceneView.vue'),
-    },
-    {
       path: '/editor',
       name: 'editor',
       component: () => import('@/views/EditorView.vue'),
-    },
-    {
-      path: '/scene-editor',
-      name: 'scene-editor',
-      component: () => import('@/views/SceneEditorPage.vue'),
     },
     {
       path: '/waypoints',
@@ -38,11 +23,6 @@ export const router = createRouter({
       path: '/sandbox',
       name: 'sandbox',
       component: () => import('@/views/SandboxView.vue'),
-    },
-    {
-      path: '/dbox',
-      name: 'dbox',
-      component: () => import('@/views/DboxView.vue'),
     },
     {
       path: '/settings',

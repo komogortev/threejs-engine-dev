@@ -20,7 +20,7 @@
       export-name="ROAD_WAYPOINTS"
     />
 
-    <button class="back-btn editor-btn" @click="router.push('/editor')">← Scene Editor</button>
+    <button class="back-btn editor-btn" @click="router.push('/editor')">← Editor</button>
     <button class="back-btn" @click="router.push('/')">← Menu</button>
   </div>
 </template>

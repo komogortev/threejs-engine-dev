@@ -69,7 +69,7 @@ interface SlamApex {
 }
 
 /**
- * OW1-style ability prototype + pool NPC blobs, composed into {@link DboxSceneModule}.
+ * OW1-style ability prototype + pool NPC blobs. (DboxSceneModule removed in Phase D D-0.)
  * Keyboard abilities use `input:action` (`ability_primary` / `ability_secondary`); rocket punch uses {@link RocketPunchPointer}.
  */
 export class DboxLab {
