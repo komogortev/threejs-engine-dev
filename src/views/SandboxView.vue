@@ -212,7 +212,7 @@ onUnmounted(async () => {
           move · Shift sprint · Space jump
         </p>
         <p class="text-white/20 text-[10px] tracking-wider text-center">
-          Tab first / third person · Time: P pause · F step frame · R resume · [ ] slow / fast
+          Tab third / first / free-float · Time: P pause · F step frame · R resume · [ ] slow / fast
         </p>
       </div>
     </Transition>
@@ -234,7 +234,7 @@ onUnmounted(async () => {
         <span class="text-[9px] font-mono text-white/50">{{ item.label }}</span>
       </div>
       <div class="mt-1 border-t border-white/10 pt-1">
-        <p class="text-white/35 text-[9px] font-mono mb-0.5">Tab — first / third person</p>
+        <p class="text-white/35 text-[9px] font-mono mb-0.5">Tab — third / first / free-float</p>
         <p class="text-white/30 text-[9px] font-mono">Pool: X 15–25 · Z −25–25 · depth 0→−25 m</p>
         <p class="text-white/30 text-[9px] font-mono">Obstacles: knee 0.5 m · body 1.8 m (X 5, 9)</p>
       </div>

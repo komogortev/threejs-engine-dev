@@ -12,6 +12,11 @@ export const router = createRouter({
     {
       path: '/editor',
       name: 'editor',
+      component: () => import('@/views/SceneEditorPage.vue'),
+    },
+    {
+      path: '/editor-legacy',
+      name: 'editor-legacy',
       component: () => import('@/views/EditorView.vue'),
     },
     {
