@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase D — D-0 ✅, D-1 ✅, D-2 ✅, D-3 ✅, D-4 next | Last: 2026-05-21 | Stack: Vue 3 + @base Three.js harness
-Working: Phase 3d signed off (2026-04-12). Player locomotion, camera presets, sandbox, settings. **D-0 complete:** menu collapsed to Sandbox · Editor · Settings; dead routes removed; Sandbox gated on saved scene. **D-1 complete:** `'free-float'` added to `GameplayCameraMode`; `PlayerCameraCoordinator` extended with free-float WASD + mouse-look; Tab cycles 3p→1p→free-float. **D-2 complete:** `/editor` hosts `SceneEditorPage` from `@base/ui`; legacy at `/editor-legacy`. **D-3 complete:** `TransformControls` in `useSceneEditorViewport` — per-NPC `THREE.Group` roots so all marker parts move together; T/R/S toolbar + keyboard shortcuts; gizmo attach/detach on selection; `dragging-changed` disables OrbitControls; uniform-scale enforcement; `gizmoMouseDown` flag prevents deselect on gizmo click; browser-verified (NPC marker translates correctly).
+Phase: Phase D — D-0 ✅, D-1 ✅, D-2 ✅, D-3 ✅, D-4 ✅ (browser-verify pending), D-5 next | Last: 2026-05-22 | Stack: Vue 3 + @base Three.js harness
+Working: Phase 3d signed off (2026-04-12). Player locomotion, camera presets, sandbox, settings. **D-0 complete:** menu collapsed to Sandbox · Editor · Settings; dead routes removed; Sandbox gated on saved scene. **D-1 complete:** `'free-float'` added to `GameplayCameraMode`; `PlayerCameraCoordinator` extended with free-float WASD + mouse-look; Tab cycles 3p→1p→free-float. **D-2 complete:** `/editor` hosts `SceneEditorPage` from `@base/ui`; legacy at `/editor-legacy`. **D-3 complete:** `TransformControls` in `useSceneEditorViewport` — per-NPC `THREE.Group` roots so all marker parts move together; T/R/S toolbar + keyboard shortcuts; gizmo attach/detach on selection; `dragging-changed` disables OrbitControls; uniform-scale enforcement; `gizmoMouseDown` flag prevents deselect on gizmo click; browser-verified. **D-4 implementation shipped (browser-verify pending):** `EditorPlacedObject` type + `placed` EditorSelection kind; `enterPlaceMode/exitPlaceMode/placeObject` in viewport — floor raycast → async GLB load → invisible hit-box → gizmo attach; `asset-picked` emit chain (AssetsSection → Hierarchy → SceneEditorView → `onAssetPicked` resolves blob URL + calls `enterPlaceMode`); Placed Objects section in hierarchy (purple ◈); place-mode hint strip; single-shot (auto-selects placed object, Esc cancels). Build clean.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: **D-4 — Asset placement pipeline** — AssetPicker `select` event → place tool → floor raycast → Y-snap → placed object in scene state + hierarchy.
+Next: **D-5 — Player model in editor** — click-to-select player character; WASD moves player; hidden in free-float; mutually exclusive with gizmo.
 
 ---
 
