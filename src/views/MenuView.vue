@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { assetDb } from '@base/ui'
 
 const router = useRouter()
 
 const hasSandboxScene = ref(false)
-onMounted(() => {
-  hasSandboxScene.value = localStorage.getItem('sandbox:scene') !== null
+onMounted(async () => {
+  // Check Dexie for named scenes (new path) or legacy localStorage save (migration pending).
+  const dbCount = await assetDb.scenes.count()
+  const legacyExists = localStorage.getItem('sandbox:scene') !== null
+  hasSandboxScene.value = dbCount > 0 || legacyExists
 })
 </script>
 

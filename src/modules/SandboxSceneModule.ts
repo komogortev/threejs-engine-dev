@@ -3,7 +3,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import { assetDb } from '@base/ui'
-import type { SandboxSceneSave } from '@base/ui'
 import { ThirdPersonSceneModule, type ThirdPersonSceneConfig } from './GameplaySceneModule'
 import type { SceneDescriptor } from '@base/scene-builder'
 
@@ -36,28 +35,18 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
   }
 
   /**
-   * Read localStorage['sandbox:scene'], resolve each placed object's blob
-   * from IndexedDB, and add the loaded GLBs to the Three.js scene.
+   * Resolve each placed object's blob from IndexedDB and add the loaded GLBs
+   * to the Three.js scene.
+   *
+   * @param sceneId — primary key of the SceneRow in assetDb.scenes
    *
    * Call this after mountChild('scene', sceneModule) completes.
    * Missing assets are skipped with a console warning — the rest still load.
    */
-  async loadPlacedObjects(): Promise<void> {
-    const raw = localStorage.getItem('sandbox:scene')
-    if (!raw) {
-      console.log('[Sandbox] No saved scene found — loading empty sandbox')
-      return
-    }
-
-    let save: SandboxSceneSave
-    try {
-      save = JSON.parse(raw) as SandboxSceneSave
-    } catch {
-      console.warn('[Sandbox] Could not parse sandbox:scene — skipping placed objects')
-      return
-    }
-    if (save.version !== 1) {
-      console.warn(`[Sandbox] Unknown sandbox:scene version "${save.version as unknown}" — skipping`)
+  async loadPlacedObjects(sceneId: string): Promise<void> {
+    const sceneRow = await assetDb.scenes.get(sceneId)
+    if (!sceneRow) {
+      console.warn(`[Sandbox] Scene "${sceneId}" not found in DB`)
       return
     }
 
@@ -65,7 +54,7 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
     const loader = new GLTFLoader()
     const tempUrls: string[] = []
 
-    for (const obj of save.placedObjects) {
+    for (const obj of sceneRow.placedObjects) {
       const row = await assetDb.assets.get(obj.assetId)
       if (!row) {
         console.warn(`[Sandbox] Asset ${obj.assetId} not in DB — skipping "${obj.label}"`)

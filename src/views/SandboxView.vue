@@ -7,6 +7,7 @@ import { useInputSettings } from '@/composables/useInputSettings'
 import { SandboxSceneModule } from '@/modules/SandboxSceneModule'
 import { sandboxScene } from '@/scenes/sandbox'
 import { useShellContext } from '@/composables/useShellContext'
+import { assetDb, type SceneRow, type SandboxSceneSave } from '@base/ui'
 
 const router  = useRouter()
 const context = useShellContext()
@@ -26,7 +27,52 @@ const sceneModule = new SandboxSceneModule({
   cameraPreset: 'close-follow',
 })
 
-// ── Time control state ─────────────────────────────────────────────────────
+// ── Scene picker state ───────────────────────────────────────────────────────
+const scenes = ref<SceneRow[]>([])
+const selectedSceneId = ref<string | null>(null)
+const showPicker = computed(() => selectedSceneId.value === null)
+
+async function loadScenesList(): Promise<void> {
+  scenes.value = await assetDb.scenes.orderBy('savedAt').reverse().toArray()
+}
+
+async function deleteScene(id: string): Promise<void> {
+  await assetDb.scenes.delete(id)
+  scenes.value = scenes.value.filter(s => s.id !== id)
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric',
+  })
+}
+
+/**
+ * One-time migration: if the old single-slot localStorage save exists and no
+ * Dexie scenes exist yet, import it as "Migrated Scene" and remove the key.
+ */
+async function migrateLocalStorage(): Promise<void> {
+  const raw = localStorage.getItem('sandbox:scene')
+  if (!raw) return
+  try {
+    const save = JSON.parse(raw) as SandboxSceneSave
+    if (!save || save.version !== 1 || !Array.isArray(save.placedObjects)) return
+    const count = await assetDb.scenes.count()
+    if (count === 0) {
+      await assetDb.scenes.add({
+        id: `scene-${crypto.randomUUID().slice(0, 8)}`,
+        name: save.name ?? 'Migrated Scene',
+        savedAt: save.savedAt || new Date().toISOString(),
+        placedObjects: save.placedObjects,
+      })
+      localStorage.removeItem('sandbox:scene')
+    }
+  } catch {
+    // Migration failed — leave localStorage intact for manual recovery
+  }
+}
+
+// ── Time control state ───────────────────────────────────────────────────────
 const timeScale = ref(1.0)
 const paused    = computed(() => timeScale.value === 0)
 
@@ -40,18 +86,18 @@ function togglePause(): void {
 }
 
 function stepFrame(): void {
-  if (!paused.value) setScale(0)   // auto-pause when stepping
+  if (!paused.value) setScale(0)
   sceneModule.stepOneFrame()
 }
 
-// ── World ready / hint ──────────────────────────────────────────────────────
+// ── World ready / hint ───────────────────────────────────────────────────────
 const worldReady = ref(false)
 const showHint   = ref(true)
 let hintTimer: ReturnType<typeof setTimeout>
 
-// ── Keyboard ────────────────────────────────────────────────────────────────
+// ── Keyboard ─────────────────────────────────────────────────────────────────
 function onKeyDown(e: KeyboardEvent): void {
-  // Skip if a text input has focus.
+  if (!worldReady.value) return
   const tag = (e.target as HTMLElement).tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
 
@@ -66,7 +112,6 @@ function onKeyDown(e: KeyboardEvent): void {
       stepFrame()
       break
     case 'KeyR':
-      // R = resume / release time control
       if (paused.value) {
         e.preventDefault()
         setScale(1.0)
@@ -74,24 +119,32 @@ function onKeyDown(e: KeyboardEvent): void {
       break
     case 'BracketLeft':
       e.preventDefault()
-      // Slow-mo: halve speed (min 0.125)
       setScale(Math.max(0.125, timeScale.value / 2))
       break
     case 'BracketRight':
       e.preventDefault()
-      // Speed-up: double speed (max 4)
       setScale(Math.min(4, timeScale.value * 2))
       break
   }
 }
 
-onMounted(async () => {
+// ── Scene start / return ─────────────────────────────────────────────────────
+async function returnToPicker(): Promise<void> {
+  if (selectedSceneId.value !== null) {
+    await engine.unmount()
+    selectedSceneId.value = null
+  }
+  await loadScenesList()
+}
+
+async function startSandbox(sceneId: string): Promise<void> {
   if (!container.value) return
+  selectedSceneId.value = sceneId
   worldReady.value = false
   await engine.mount(container.value, context)
   await engine.mountChild('input', inputModule)
   await engine.mountChild('scene', sceneModule)
-  await sceneModule.loadPlacedObjects()
+  await sceneModule.loadPlacedObjects(sceneId)
   worldReady.value = true
 
   container.value.focus()
@@ -105,14 +158,20 @@ onMounted(async () => {
     }
   })
   hintTimer = setTimeout(() => { showHint.value = false }, 5000)
+}
 
+onMounted(async () => {
+  await migrateLocalStorage()
+  await loadScenesList()
   window.addEventListener('keydown', onKeyDown)
 })
 
 onUnmounted(async () => {
   window.removeEventListener('keydown', onKeyDown)
   clearTimeout(hintTimer)
-  await engine.unmount()
+  if (selectedSceneId.value !== null) {
+    await engine.unmount()
+  }
 })
 </script>
 
@@ -127,9 +186,9 @@ onUnmounted(async () => {
       tabindex="0"
     />
 
-    <!-- Loading veil -->
+    <!-- Loading veil (shown while engine mounts after scene pick) -->
     <div
-      v-if="!worldReady"
+      v-if="!showPicker && !worldReady"
       class="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black text-white/45 text-sm"
       aria-busy="true" aria-live="polite"
     >
@@ -137,13 +196,65 @@ onUnmounted(async () => {
       <span>Building sandbox…</span>
     </div>
 
-    <!-- Back button -->
-    <div class="absolute top-4 left-4 z-40">
+    <!-- Scene picker overlay -->
+    <div
+      v-if="showPicker"
+      class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90"
+    >
+      <!-- Back button -->
+      <div class="absolute top-4 left-4">
+        <button class="picker-nav-btn" @click="router.push('/')">← Menu</button>
+      </div>
+
+      <div class="picker-panel">
+        <h2 class="picker-title">Load Scene</h2>
+
+        <!-- Empty state -->
+        <div v-if="scenes.length === 0" class="picker-empty">
+          <p class="picker-empty-text">No saved scenes yet.</p>
+          <button class="picker-empty-btn" @click="router.push('/scene-editor')">
+            Open Editor →
+          </button>
+        </div>
+
+        <!-- Scene list -->
+        <div v-else class="picker-list">
+          <div
+            v-for="scene in scenes"
+            :key="scene.id"
+            class="picker-item"
+            @click="startSandbox(scene.id)"
+          >
+            <div class="picker-item-info">
+              <span class="picker-item-name">{{ scene.name }}</span>
+              <span class="picker-item-meta">
+                {{ scene.placedObjects.length }} object{{ scene.placedObjects.length !== 1 ? 's' : '' }}
+                · {{ formatDate(scene.savedAt) }}
+              </span>
+            </div>
+            <button
+              class="picker-item-delete"
+              title="Delete scene"
+              @click.stop="deleteScene(scene.id)"
+            >×</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Back button (in-sandbox) -->
+    <div v-if="!showPicker" class="absolute top-4 left-4 z-40 flex gap-2">
       <button
         class="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 text-white/70 hover:text-white text-xs font-medium rounded-lg backdrop-blur-sm border border-white/10 transition-all"
         @click="router.push('/')"
       >
         ← Menu
+      </button>
+      <button
+        class="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 text-white/70 hover:text-white text-xs font-medium rounded-lg backdrop-blur-sm border border-white/10 transition-all"
+        @click="returnToPicker()"
+      >
+        ⊞ Scenes
       </button>
     </div>
 
@@ -236,5 +347,121 @@ onUnmounted(async () => {
   font-size: 0.7rem;
   font-weight: 600;
   font-family: ui-monospace, monospace;
+}
+
+/* ── Scene picker ─────────────────────────────────────────────────────────── */
+.picker-nav-btn {
+  padding: 6px 14px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.picker-nav-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+.picker-panel {
+  background: rgba(10, 15, 25, 0.95);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 28px 32px;
+  min-width: 380px;
+  max-width: 520px;
+  width: 90vw;
+}
+
+.picker-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  margin: 0 0 20px;
+}
+
+.picker-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0;
+}
+.picker-empty-text {
+  color: rgba(255,255,255,0.3);
+  font-size: 13px;
+}
+.picker-empty-btn {
+  padding: 8px 20px;
+  background: rgba(20, 60, 100, 0.6);
+  border: 1px solid rgba(90,176,245,0.25);
+  border-radius: 6px;
+  color: #7ab0d8;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.picker-empty-btn:hover { color: #c8e0f0; border-color: rgba(90,176,245,0.5); }
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.picker-item:hover {
+  background: rgba(90,176,245,0.06);
+  border-color: rgba(90,176,245,0.2);
+}
+
+.picker-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.picker-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.8);
+}
+.picker-item-meta {
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+  font-family: ui-monospace, monospace;
+}
+
+.picker-item-delete {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgba(255,255,255,0.2);
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.picker-item-delete:hover {
+  color: #f87171;
+  border-color: rgba(248,113,113,0.3);
+  background: rgba(248,113,113,0.08);
 }
 </style>
