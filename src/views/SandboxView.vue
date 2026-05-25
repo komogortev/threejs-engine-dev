@@ -91,6 +91,7 @@ onMounted(async () => {
   await engine.mount(container.value, context)
   await engine.mountChild('input', inputModule)
   await engine.mountChild('scene', sceneModule)
+  await sceneModule.loadPlacedObjects()
   worldReady.value = true
 
   container.value.focus()
@@ -216,29 +217,6 @@ onUnmounted(async () => {
         </p>
       </div>
     </Transition>
-
-    <!-- Sandbox legend (bottom-left) -->
-    <div
-      v-if="worldReady"
-      class="absolute bottom-4 left-4 z-40 flex flex-col gap-0.5 bg-black/50 border border-white/10 rounded-lg px-3 py-2 backdrop-blur-sm"
-    >
-      <p class="text-white/30 text-[9px] font-mono uppercase tracking-widest mb-1">Landing tiers (X ≈ −28)</p>
-      <div v-for="item in [
-        { label: 'soft     ~2 m', color: '#22d3ee' },
-        { label: 'medium   ~4 m', color: '#84cc16' },
-        { label: 'hard     ~7 m', color: '#fbbf24' },
-        { label: 'critical ~11 m', color: '#f97316' },
-        { label: 'fatal    ~22 m', color: '#ef4444' },
-      ]" :key="item.label" class="flex items-center gap-2">
-        <span class="inline-block size-2 rounded-full flex-shrink-0" :style="{ background: item.color }" />
-        <span class="text-[9px] font-mono text-white/50">{{ item.label }}</span>
-      </div>
-      <div class="mt-1 border-t border-white/10 pt-1">
-        <p class="text-white/35 text-[9px] font-mono mb-0.5">Tab — third / first / free-float</p>
-        <p class="text-white/30 text-[9px] font-mono">Pool: X 15–25 · Z −25–25 · depth 0→−25 m</p>
-        <p class="text-white/30 text-[9px] font-mono">Obstacles: knee 0.5 m · body 1.8 m (X 5, 9)</p>
-      </div>
-    </div>
 
   </div>
 </template>
