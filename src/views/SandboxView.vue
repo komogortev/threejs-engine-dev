@@ -17,7 +17,10 @@ const { loadActive } = useInputSettings()
 const engine      = new ThreeModule()
 const inputModule = new InputModule(
   mergeBindings(loadActive(), {
-    keyboard: { toggle_camera: ['Tab'] },
+    keyboard: {
+      toggle_camera: ['Tab'],
+      crouch: ['KeyC', 'ControlLeft', 'ControlRight'],
+    },
     gamepad: { toggle_camera: [8] },
   } as Parameters<typeof mergeBindings>[1]),
   { enablePointerLook: true },
@@ -25,6 +28,9 @@ const inputModule = new InputModule(
 const sceneModule = new SandboxSceneModule({
   descriptor: sandboxScene,
   cameraPreset: 'close-follow',
+  cameraMode: 'first-person',
+  /** Feet-aligned GLB root — offset to eye height, matches editor play-sim and three-dreams. */
+  firstPersonEyeOffsetY: 1.675,
 })
 
 // ── Scene picker state ───────────────────────────────────────────────────────
@@ -321,10 +327,10 @@ onUnmounted(async () => {
           <div class="flex gap-1"><kbd class="key">A</kbd><kbd class="key">S</kbd><kbd class="key">D</kbd></div>
         </div>
         <p class="text-white/30 text-[11px] tracking-widest uppercase text-center">
-          move · Shift sprint · Space jump
+          move · Shift sprint · Ctrl/C crouch · Space jump
         </p>
         <p class="text-white/20 text-[10px] tracking-wider text-center">
-          Tab third / first / free-float · Time: P pause · F step frame · R resume · [ ] slow / fast
+          Tab FPV · 3P · float · Time: P pause · F step frame · R resume · [ ] slow / fast
         </p>
       </div>
     </Transition>
