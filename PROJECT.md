@@ -41,6 +41,7 @@ Work is organized in three tracks. Critical path unblocks the game fork; foundat
 | 9 | Player ability locomotion hooks — rocket punch carry, skim jump, vertical impulse | 1 session | **Done** (2026-04-11) |
 | 10 | GameplaySceneModule refactor — both harness and three-dreams use shared base cleanly | 1 session, ~10 files | Pending |
 | 11 | Camera-relative movement (`movementBasis: 'camera'`) | 1 session | Deferred |
+| 12 | **T-F7 GLB model normalization** — pipeline center pass + AssetLoader runtime fallback | 2 sessions | **Next** |
 
 ### Dbox Track (extracted to three-dbox 2026-04-12)
 
@@ -83,6 +84,8 @@ Steady progress on solid foundations. Each session should leave the codebase cle
 ## Architectural Decisions
 
 <!-- Append-only. Date each entry. Never remove old decisions. -->
+
+- **2026-04-19** — **T-F7 design complete.** GLB normalization uses a two-layer fix: (1) pipeline — `gltf-transform center --pivot bottom` in `optimize-glb.sh`; (2) runtime fallback — `normalizeOrigin: true` in `AssetLoader` using `Box3` pivot-wrap. Pattern derived from gmod-model-pipeline Iter 3: "correct in the parent frame at export time, not per child at runtime." See `docs/T-F7-glb-normalization.md`.
 
 - **2026-03-22** — Harness is a permanent fork, not promoted to a package. Reason: it is an integration test bed, not a reusable module. Packages extracted from it live in SHARED.
 - **2026-03-23** — `ThreeModule` owns the RAF loop; child modules receive ticks via `engine:frame` event — no direct `update()` calls. Ensures decoupled module lifecycle.

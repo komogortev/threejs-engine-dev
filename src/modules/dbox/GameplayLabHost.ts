@@ -2,7 +2,7 @@ import type * as THREE from 'three'
 import type { PlayerController } from '@base/player-three'
 
 /**
- * Minimal surface the dbox lab needs from {@link SandboxSceneModule} / {@link DboxSceneModule}
+ * Minimal surface the dbox lab needs from {@link SandboxSceneModule}
  * without inheriting gameplay internals.
  */
 export interface GameplayLabHost {

@@ -422,6 +422,10 @@ export class GameplaySceneModule extends BaseModule {
       this.character ?? null,
       this.context.eventBus,
     )
+    // Hide character in FPV so the head doesn't clip into the camera
+    if (this.character) {
+      this.character.visible = mode !== 'first-person'
+    }
   }
 
   // ─── Mount ──────────────────────────────────────────────────────────────────
@@ -527,6 +531,7 @@ export class GameplaySceneModule extends BaseModule {
 
     if (this.gameplayCam.getMode() === 'first-person') {
       this.player.setMovementBasis('camera')
+      this.character.visible = false   // hide on initial FPV entry
     }
 
     this.offInputAction = context.eventBus.on('input:action', (raw) => {
