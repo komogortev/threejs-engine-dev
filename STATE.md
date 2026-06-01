@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-05-31 | Stack: Vue 3 + @base Three.js harness
-Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29, space home 2026-05-31, S1 2026-05-31, S2 2026-06-01). **Phase 5 S3 SHIPPED (2026-05-31):** `loadRoomPackage.ts` in `@base/ui` (fflate unzipSync → manifest + scene + blob URL map + revoke()) + `RoomPlayerModule.ts` (extends GameplaySceneModule, hides disc/ring, loads placed GLBs + static NPCs + spawn point + ambient audio via MusicLayer + master gain volume) + `RoomPlayerView.vue` (drag-drop ZIP → loadRoomPackage → boot engine → FPV walk; idle/loading/playing states; "← Load another" HUD) + `/room` route + "Load Room" button in MenuView. Both builds clean. Drop zone browser-verified.
+Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
+Working: All prior + **S4-c SHIPPED (2026-06-01):** bone search filter in Pose tab inspector (live case-insensitive, resets on NPC deselect), IK hint UI (4 chain buttons — rightArm/leftArm/rightLeg/leftLeg — active chain highlighted, wired to `selectIkTarget()` in viewport, `activeIkChainName` tracks state in SceneEditorView). Vitest foundation added to `@base/ui`: 19 tests (SceneEditorExporter × 12, usePoseEditor × 7), all passing. Phase 5 S4 now fully complete (a + b + c).
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: Phase 5 S4 — Pose Editor (FK + CCDIKSolver, EditorNpcEntry.poseOverride), or T-F7 GLB normalization pipeline.
+Next: S5 Animation Recorder. Personal Planner L2-S2 Tags also queued.
 
 ---
 
