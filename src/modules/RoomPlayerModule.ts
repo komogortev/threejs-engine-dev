@@ -98,6 +98,19 @@ export class RoomPlayerModule extends GameplaySceneModule {
       }
       try {
         const gltf = await loader.loadAsync(blobUrl)
+
+        // Apply authored pose overrides before any AnimationMixer is created
+        if (npc.poseOverride && npc.poseOverride.length > 0) {
+          const skinnedMeshes: THREE.SkinnedMesh[] = []
+          gltf.scene.traverse(obj => { if (obj instanceof THREE.SkinnedMesh) skinnedMeshes.push(obj) })
+          const sm = skinnedMeshes[0]
+          if (sm) {
+            for (const o of npc.poseOverride) {
+              sm.skeleton.getBoneByName(o.bone)?.quaternion.fromArray(o.q)
+            }
+          }
+        }
+
         const root = new THREE.Group()
         root.position.set(npc.x, npc.y ?? 0, npc.z)
         // EditorNpcEntry.rotationY is authored in degrees

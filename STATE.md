@@ -2,10 +2,10 @@
 
 ## SNAPSHOT
 Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
-Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29, space home 2026-05-31, S1 2026-05-31, S2 2026-06-01, S3 2026-06-01). **T-F7 GLB normalization SHIPPED (2026-06-01):** `optimize-glb.sh` two-pass center→optimize (portable mktemp, EXIT trap) + `AssetLoader.normalizeGLTFOrigin(scene)` exported from `@base/threejs-engine` (Box3 pivot-wrap, empty-box guard, height-range warn). Both builds clean. PRs: SHARED #31 + three-dreams #21.
+Working: All prior + **S4-b SHIPPED (2026-06-01):** CCD IK via custom iterative solver (`runCcdIk` — 10-iteration CCD, no skeleton modification needed), IK target spheres for all 4 Mixamo limb chains (right/leftArm, right/leftLeg) appearing in viewport when Pose tab is active — click to attach TC in translate mode → bone chain follows via `objectChange` IK update; `selectIkTarget()` + `ikChainNames` ref on viewport return. `detachPoseNpc` / `resetPoseBones` handle IK cleanup and sphere repositioning. `RoomPlayerModule` applies `poseOverride` quaternions before root add (static NPC pose). Both builds clean. Branch SHARED PR #31.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: Phase 5 S4 — **Pose Editor** (FK + CCDIKSolver, `EditorNpcEntry.poseOverride`). P3b Rodin API deferred (no paid services); Session C (WSL2+ROCm) queued for next planning session. Not a blocker — existing Mixamo NPCs sufficient for Pose Editor dev.
+Next: S4-c polish (optional) or S5 Animation Recorder. Personal Planner L2-S2 Tags also queued.
 
 ---
 
