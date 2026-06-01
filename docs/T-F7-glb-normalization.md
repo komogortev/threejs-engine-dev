@@ -1,6 +1,6 @@
 # T-F7 — GLB Model Normalization
 
-> **Status:** Design complete — ready for implementation (2026-04-19)
+> **Status:** Implemented 2026-06-01 — pipeline + runtime fallback shipped; integration validation pending first Rodin GLB (P3b)
 > **Affects:** `@base/threejs-engine` (AssetLoader), `three-dreams/scripts/optimize-glb.sh`, shared character pipeline
 > **Blocks:** Clean Tripo AI model adoption across three-dreams + three-dbox
 
@@ -101,18 +101,18 @@ if (height > 5 || height < 0.5) {
 
 ### Phase A — Pipeline fix (unblocks Tripo adoption immediately)
 
-- [ ] **A1** Add `center --pivot bottom` pass to `optimize-glb.sh` (two-pass: center → optimize)
-- [ ] **A2** Re-optimize all existing Tripo GLBs through the updated script
-- [ ] **A3** Verify in three-dreams: father NPC + any Tripo characters align correctly
-- [ ] **A4** Verify in three-dbox: dfist_base.glb (if Tripo-sourced) aligns correctly
+- [x] **A1** Add `center --pivot bottom` pass to `optimize-glb.sh` (two-pass: center → optimize) — 2026-06-01
+- [ ] **A2** Re-optimize existing character GLBs (deferred — no Tripo GLBs in project yet; run when first Rodin GLB arrives)
+- [ ] **A3** Verify in three-dreams: Rodin character aligns correctly (pending P3b)
+- [ ] **A4** Verify in three-dbox: dfist_base.glb (if Tripo-sourced) aligns correctly (pending)
 
 ### Phase B — Runtime fallback in AssetLoader
 
-- [ ] **B1** Add `normalizeOrigin?: boolean` option to character load API in `@base/threejs-engine/AssetLoader.ts`
-- [ ] **B2** Implement pivot-wrap + floor-snap logic (Box3 approach above)
-- [ ] **B3** Add scale-drift detection + warning log (do not auto-correct silently)
-- [ ] **B4** Write unit test: load a GLB with known offset → confirm pivot.position corrects it
-- [ ] **B5** Rebuild `@base/threejs-engine` + validate in harness sandbox scene
+- [x] **B1** Add `normalizeGLTFOrigin(scene: THREE.Group): THREE.Group` to `@base/threejs-engine/AssetLoader.ts` — 2026-06-01
+- [x] **B2** Implement pivot-wrap + floor-snap logic (Box3 approach) — 2026-06-01
+- [x] **B3** Add scale-drift detection + warning log (height > 5 || < 0.5) — 2026-06-01
+- [ ] **B4** Unit test (no test infrastructure in package — skip unless regression found)
+- [x] **B5** Rebuild `@base/threejs-engine` + `threejs-engine-dev` — both clean 2026-06-01
 
 ### Phase C — Integration validation
 

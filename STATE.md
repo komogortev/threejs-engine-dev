@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-05-31 | Stack: Vue 3 + @base Three.js harness
+Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
 Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29, space home 2026-05-31, S1 2026-05-31, S2 2026-06-01). **Phase 5 S3 SHIPPED (2026-05-31):** `loadRoomPackage.ts` in `@base/ui` (fflate unzipSync → manifest + scene + blob URL map + revoke()) + `RoomPlayerModule.ts` (extends GameplaySceneModule, hides disc/ring, loads placed GLBs + static NPCs + spawn point + ambient audio via MusicLayer + master gain volume) + `RoomPlayerView.vue` (drag-drop ZIP → loadRoomPackage → boot engine → FPV walk; idle/loading/playing states; "← Load another" HUD) + `/room` route + "Load Room" button in MenuView. Both builds clean. Drop zone browser-verified.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: Phase 5 S4 — Pose Editor (FK + CCDIKSolver, EditorNpcEntry.poseOverride), or T-F7 GLB normalization pipeline.
+Next: Phase 5 S4 — **T-F7 GLB normalization** (confirmed direction 2026-06-01; plans locked). Two-layer fix: `optimize-glb.sh` center pass + `AssetLoader.normalizeGLTFOrigin()` pivot-wrap. Then P3b Rodin API → Pose Editor (FK + CCDIKSolver) → Personal Planner L2-S2 Tags.
 
 ---
 
