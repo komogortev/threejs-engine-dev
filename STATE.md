@@ -2,10 +2,10 @@
 
 ## SNAPSHOT
 Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
-Working: All prior + **S4-b SHIPPED (2026-06-01):** CCD IK via custom iterative solver (`runCcdIk` — 10-iteration CCD, no skeleton modification needed), IK target spheres for all 4 Mixamo limb chains (right/leftArm, right/leftLeg) appearing in viewport when Pose tab is active — click to attach TC in translate mode → bone chain follows via `objectChange` IK update; `selectIkTarget()` + `ikChainNames` ref on viewport return. `detachPoseNpc` / `resetPoseBones` handle IK cleanup and sphere repositioning. `RoomPlayerModule` applies `poseOverride` quaternions before root add (static NPC pose). Both builds clean. Branch SHARED PR #31.
+Working: All prior + **S4-c SHIPPED (2026-06-01):** bone search filter in Pose tab inspector (live case-insensitive, resets on NPC deselect), IK hint UI (4 chain buttons — rightArm/leftArm/rightLeg/leftLeg — active chain highlighted, wired to `selectIkTarget()` in viewport, `activeIkChainName` tracks state in SceneEditorView). Vitest foundation added to `@base/ui`: 19 tests (SceneEditorExporter × 12, usePoseEditor × 7), all passing. Phase 5 S4 now fully complete (a + b + c).
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: S4-c polish (optional) or S5 Animation Recorder. Personal Planner L2-S2 Tags also queued.
+Next: S5 Animation Recorder. Personal Planner L2-S2 Tags also queued.
 
 ---
 
