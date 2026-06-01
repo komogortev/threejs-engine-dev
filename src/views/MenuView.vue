@@ -36,6 +36,12 @@ onMounted(async () => {
         Editor
       </button>
       <button
+        class="w-full px-6 py-3 bg-teal-900 hover:bg-teal-800 active:bg-teal-950 text-teal-300 text-sm font-semibold rounded-xl transition-colors"
+        @click="router.push('/room')"
+      >
+        Load Room
+      </button>
+      <button
         class="w-full px-6 py-3 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-400 text-sm font-semibold rounded-xl transition-colors"
         @click="router.push('/settings')"
       >

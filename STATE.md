@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
-Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29, space home 2026-05-31, S1 2026-05-31). **Phase 5 S2 SHIPPED (2026-06-01):** `roomPackageTypes.ts` (`RoomPackageManifest` + `RoomPackageScene` contract) + `exportRoomPackage.ts` (fflate ZIP: placed GLBs + NPC meshes + anim packs + audio, drag-drop delivery) + `buildRoomPackageScene()` in `SceneEditorExporter.ts` + "Export Room" button in editor toolbar (disabled until scene saved) + `@base/ui` index exports. Both builds clean. Button browser-verified.
+Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-05-31 | Stack: Vue 3 + @base Three.js harness
+Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29, space home 2026-05-31, S1 2026-05-31, S2 2026-06-01). **Phase 5 S3 SHIPPED (2026-05-31):** `loadRoomPackage.ts` in `@base/ui` (fflate unzipSync → manifest + scene + blob URL map + revoke()) + `RoomPlayerModule.ts` (extends GameplaySceneModule, hides disc/ring, loads placed GLBs + static NPCs + spawn point + ambient audio via MusicLayer + master gain volume) + `RoomPlayerView.vue` (drag-drop ZIP → loadRoomPackage → boot engine → FPV walk; idle/loading/playing states; "← Load another" HUD) + `/room` route + "Load Room" button in MenuView. Both builds clean. Drop zone browser-verified.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: **Phase 5 S3** — `loadRoomPackage.ts` (fflate unzipSync → in-memory blob URL map) + `RoomPlayerView.vue` (drag-drop ZIP, boots scene) + `RoomPlayerModule.ts` (placed GLBs + NPCs + FPV camera + MusicLayer ambient) + `/room` route + "Load Room" in MenuView.
+Next: Phase 5 S4 — Pose Editor (FK + CCDIKSolver, EditorNpcEntry.poseOverride), or T-F7 GLB normalization pipeline.
 
 ---
 
