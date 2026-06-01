@@ -2,10 +2,10 @@
 
 ## SNAPSHOT
 Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-05-31 | Stack: Vue 3 + @base Three.js harness
-Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29). **Scene authoring investigation (2026-05-31):** Procedural GLB generator system shipped — `src/utils/roomMeshGen.ts` (genFloor, genWall, genGlassWall, genVaultCeiling, genVaultRib) + `src/utils/seedSpaceHome.ts` (Dexie seed + clear). "space home" scene created + verified live in editor: 9 objects (pale-blue floor, 1.6m-bow glass north wall, 3 semi-transparent white walls, barrel vault ceiling 2.5m rise, 3 arch ribs). Dev console hooks: `window.__seedSpaceHome(opts?)` / `window.__clearSpaceHome()` in dev mode via `main.ts`. Room-from-image CV scoped: Track A (Depth Anything v2 Small → Open3D planes, real photos) and Track B (vanishing-point extraction → Manhattan cuboid, rendered scenes) — both greenfield in `TOOLS/image-to-3d/`; Track B estimated ~half dev-day.
+Working: All prior (D-0–D-6 ✅, camera calibration 2026-05-29, space home 2026-05-31). **Phase 5 S1 SHIPPED (2026-05-31):** `@base/ui` Dexie v3 (`SceneRow.config?: SceneEditorConfig` — no-op upgrade, additive) + `'audio'` AssetKind (mp3/ogg/wav upload + MIME inference) + `SceneEditorConfig.ambientAudioAssetId?/ambientAudioVolume?` + inspector Ambient Audio section (track picker + volume slider) + save writes full `effectiveConfig` to `row.config` + load restores ambient audio from `row.config`. Build clean. Inspector verified in browser.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: **Phase 5 S1 (primary)** — Dexie v3 (`SceneRow.config?: SceneEditorConfig`) + `'audio'` AssetKind + `SceneEditorConfig.ambientAudioAssetId/Volume` + inspector ambient audio picker. **Parallel option:** room-from-image Track B (VP extraction → room cuboid GLB) in `TOOLS/image-to-3d/` — ~half dev-day, CPU-only, uses OpenCV + trimesh.
+Next: **Phase 5 S2** — `roomPackageTypes.ts` (manifest.json + scene.json + assets/ contract) + `exportRoomPackage()` function + "Export Room Package" button in editor save toolbar. S3 after: `loadRoomPackage` + `RoomPlayerView` + `/room` route + MusicLayer wiring.
 
 ---
 
