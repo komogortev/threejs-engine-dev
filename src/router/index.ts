@@ -30,6 +30,11 @@ export const router = createRouter({
       component: () => import('@/views/SandboxView.vue'),
     },
     {
+      path: '/room',
+      name: 'room',
+      component: () => import('@/views/RoomPlayerView.vue'),
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
