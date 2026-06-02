@@ -54,7 +54,18 @@ export class RoomPlayerModule extends GameplaySceneModule {
     this.musicLayer = null
     this.audioCtx?.close().catch(() => {})
     this.audioCtx = null
-    for (const m of this.placedMeshes) m.parent?.remove(m)
+    for (const root of this.placedMeshes) {
+      root.traverse(child => {
+        const mesh = child as THREE.Mesh
+        if (mesh.isMesh) {
+          mesh.geometry?.dispose()
+          const mat = mesh.material
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose())
+          else (mat as THREE.Material)?.dispose()
+        }
+      })
+      root.parent?.remove(root)
+    }
     this.placedMeshes = []
     await super.onUnmount()
   }
