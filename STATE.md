@@ -5,7 +5,7 @@ Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-02 | S
 Working: All prior + **S4-c SHIPPED (2026-06-01)** + **2026-06-02 bug sweep:** `RoomPlayerModule.onUnmount` now disposes Three.js geometries/materials on room exit (was leaking GPU resources). Editor scene load/save flow hardened: `saveScene` Vue Proxy fix, `onLoadScene` NPC/zone restore, `onSwitchScene` guard, `clearScene` GPU disposal, waypoints restore on load. FPV environment menu scoped (in-world CanvasTexture screen, Dexie scenes source).
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: S5 Animation Recorder. FPV environment menu implementation queued.
+Next: **FPV environment menu (active this session)** — CanvasTexture screen + E-key + Dexie scenes in `RoomPlayerModule`. Then S5 Animation Recorder.
 
 ---
 
