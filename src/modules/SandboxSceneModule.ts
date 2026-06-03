@@ -27,9 +27,28 @@ export class SandboxSceneModule extends ThirdPersonSceneModule {
   }
 
   protected override async onUnmount(): Promise<void> {
-    for (const m of this.placedMeshes) m.parent?.remove(m)
+    for (const m of this.placedMeshes) {
+      m.traverse(child => {
+        const mesh = child as THREE.Mesh
+        if (mesh.isMesh) {
+          mesh.geometry?.dispose()
+          const mat = mesh.material
+          if (Array.isArray(mat)) mat.forEach(mm => mm.dispose())
+          else (mat as THREE.Material)?.dispose()
+        }
+      })
+      m.parent?.remove(m)
+    }
     this.placedMeshes = []
-    for (const m of this.gridMeshes) m.parent?.remove(m)
+    for (const m of this.gridMeshes) {
+      // GridHelper and LineSegments store geometry + material directly
+      const ls = m as THREE.LineSegments
+      ls.geometry?.dispose()
+      const mat = ls.material
+      if (Array.isArray(mat)) mat.forEach(mm => mm.dispose())
+      else (mat as THREE.Material)?.dispose()
+      m.parent?.remove(m)
+    }
     this.gridMeshes = []
     await super.onUnmount()
   }
