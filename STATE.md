@@ -2,10 +2,10 @@
 
 ## SNAPSHOT
 Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-02 | Stack: Vue 3 + @base Three.js harness
-Working: All prior + **S4-c SHIPPED (2026-06-01)** + **2026-06-02 bug sweep:** `RoomPlayerModule.onUnmount` now disposes Three.js geometries/materials on room exit (was leaking GPU resources). Editor scene load/save flow hardened: `saveScene` Vue Proxy fix, `onLoadScene` NPC/zone restore, `onSwitchScene` guard, `clearScene` GPU disposal, waypoints restore on load. FPV environment menu scoped (in-world CanvasTexture screen, Dexie scenes source).
+Working: All prior + **FPV environment menu SHIPPED (2026-06-02):** `EnvironmentScreen.ts` (CanvasTexture on PlaneGeometry, scene list, scroll indicators, dispose lifecycle); `RoomPlayerModule.unloadRoom()` public method + `showEnvironmentMenu/hideEnvironmentMenu/navigate/getSelectedSceneId` API; E-key opens in-world screen, arrows navigate, Enter loads scene via `loadRoomFromDb()` (SHARED). **Sandbox black screen fix (2026-06-02):** `GameplaySceneModule.onMount()` resets `gameplayCam` to configured initial mode before `coordinator.initCamera()` — stale first-person mode on remount put camera inside mesh (black interior); `SandboxView.startSandbox()` wrapped in try/catch, reverts to picker on error. PRs: SHARED #37 (`loadRoomFromDb`), engine-dev #21 (FPV menu + sandbox fix) — both open.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: **FPV environment menu (active this session)** — CanvasTexture screen + E-key + Dexie scenes in `RoomPlayerModule`. Then S5 Animation Recorder.
+Next: S5 Animation Recorder — `capturePose()` as keyframe primitive → `QuaternionKeyframeTrack` → `GLTFExporter` → Dexie animation-pack. Then Personal Planner L2-S2 Tags.
 
 ---
 
