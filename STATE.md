@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
-Working: All prior + **S4-c SHIPPED (2026-06-01):** bone search filter in Pose tab inspector (live case-insensitive, resets on NPC deselect), IK hint UI (4 chain buttons — rightArm/leftArm/rightLeg/leftLeg — active chain highlighted, wired to `selectIkTarget()` in viewport, `activeIkChainName` tracks state in SceneEditorView). Vitest foundation added to `@base/ui`: 19 tests (SceneEditorExporter × 12, usePoseEditor × 7), all passing. Phase 5 S4 now fully complete (a + b + c).
+Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-02 | Stack: Vue 3 + @base Three.js harness
+Working: All prior + **S4-c SHIPPED (2026-06-01)** + **2026-06-02 bug sweep:** `RoomPlayerModule.onUnmount` now disposes Three.js geometries/materials on room exit (was leaking GPU resources). Editor scene load/save flow hardened: `saveScene` Vue Proxy fix, `onLoadScene` NPC/zone restore, `onSwitchScene` guard, `clearScene` GPU disposal, waypoints restore on load. FPV environment menu scoped (in-world CanvasTexture screen, Dexie scenes source).
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: S5 Animation Recorder. Personal Planner L2-S2 Tags also queued.
+Next: S5 Animation Recorder. FPV environment menu implementation queued.
 
 ---
 
