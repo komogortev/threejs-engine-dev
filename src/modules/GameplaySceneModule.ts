@@ -526,6 +526,12 @@ export class GameplaySceneModule extends BaseModule {
       debugClipResolution: this.cfg.debugClipResolution,
     })
 
+    // Reset camera mode to configured initial state so a remount (same module
+    // instance, second scene load) starts clean instead of inheriting the mode
+    // from the previous session — e.g. first-person hides the character and
+    // positions the camera inside the mesh, producing a black screen.
+    this.gameplayCam.setMode(this.cfg.cameraMode ?? 'third-person')
+
     this.coordinator.mount(context.eventBus)
     this.coordinator.initCamera(ctx.camera, this.character)
 
