@@ -3,8 +3,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import { MusicLayer } from '@base/audio'
+import type { LoadedRoomPackage, SceneRow } from '@base/ui'
 import { GameplaySceneModule } from './GameplaySceneModule'
-import type { LoadedRoomPackage } from '@base/ui'
+import { EnvironmentScreen } from '@/screens/EnvironmentScreen'
 
 /**
  * RoomPlayerModule — FPV walkthrough of a room package.
@@ -23,6 +24,7 @@ export class RoomPlayerModule extends GameplaySceneModule {
   private placedMeshes: THREE.Object3D[] = []
   private audioCtx: AudioContext | null = null
   private musicLayer: MusicLayer | null = null
+  private envScreen: EnvironmentScreen | null = null
 
   constructor() {
     super({
@@ -46,16 +48,68 @@ export class RoomPlayerModule extends GameplaySceneModule {
         }
       }
     }
+
+    this.envScreen = new EnvironmentScreen()
+    ctx.scene.add(this.envScreen.mesh)
   }
 
-  protected override async onUnmount(): Promise<void> {
+  /**
+   * Clear all placed meshes and audio without tearing down the engine.
+   * Call this before loadRoom() when switching environments in-place.
+   */
+  async unloadRoom(): Promise<void> {
     this.musicLayer?.stop(0.5)
     this.musicLayer?.dispose()
     this.musicLayer = null
     this.audioCtx?.close().catch(() => {})
     this.audioCtx = null
-    for (const m of this.placedMeshes) m.parent?.remove(m)
+    for (const root of this.placedMeshes) {
+      root.traverse(child => {
+        const mesh = child as THREE.Mesh
+        if (mesh.isMesh) {
+          mesh.geometry?.dispose()
+          const mat = mesh.material
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose())
+          else (mat as THREE.Material)?.dispose()
+        }
+      })
+      root.parent?.remove(root)
+    }
     this.placedMeshes = []
+  }
+
+  // ── Environment menu ──────────────────────────────────────────────────────
+
+  showEnvironmentMenu(scenes: SceneRow[]): void {
+    const ctx = this.context as ThreeContext
+    this.envScreen?.show(scenes, ctx.camera)
+  }
+
+  hideEnvironmentMenu(): void {
+    this.envScreen?.hide()
+  }
+
+  get isEnvironmentMenuVisible(): boolean {
+    return this.envScreen?.isVisible ?? false
+  }
+
+  navigateEnvironmentMenu(dir: 1 | -1): void {
+    this.envScreen?.navigate(dir)
+  }
+
+  getSelectedSceneId(): string | null {
+    return this.envScreen?.getSelectedId() ?? null
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  protected override async onUnmount(): Promise<void> {
+    await this.unloadRoom()
+    if (this.envScreen) {
+      this.envScreen.dispose()
+      this.envScreen.mesh.parent?.remove(this.envScreen.mesh)
+      this.envScreen = null
+    }
     await super.onUnmount()
   }
 

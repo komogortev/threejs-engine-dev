@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-01 | Stack: Vue 3 + @base Three.js harness
-Working: All prior + **S4-c SHIPPED (2026-06-01):** bone search filter in Pose tab inspector (live case-insensitive, resets on NPC deselect), IK hint UI (4 chain buttons — rightArm/leftArm/rightLeg/leftLeg — active chain highlighted, wired to `selectIkTarget()` in viewport, `activeIkChainName` tracks state in SceneEditorView). Vitest foundation added to `@base/ui`: 19 tests (SceneEditorExporter × 12, usePoseEditor × 7), all passing. Phase 5 S4 now fully complete (a + b + c).
+Phase: Phase D COMPLETE → Phase 5 Room Package pipeline | Last: 2026-06-02 | Stack: Vue 3 + @base Three.js harness
+Working: All prior + **FPV environment menu SHIPPED (2026-06-02):** `EnvironmentScreen.ts` (CanvasTexture on PlaneGeometry, scene list, scroll indicators, dispose lifecycle); `RoomPlayerModule.unloadRoom()` public method + `showEnvironmentMenu/hideEnvironmentMenu/navigate/getSelectedSceneId` API; E-key opens in-world screen, arrows navigate, Enter loads scene via `loadRoomFromDb()` (SHARED). **Sandbox black screen fix (2026-06-02):** `GameplaySceneModule.onMount()` resets `gameplayCam` to configured initial mode before `coordinator.initCamera()` — stale first-person mode on remount put camera inside mesh (black interior); `SandboxView.startSandbox()` wrapped in try/catch, reverts to picker on error. PRs: SHARED #37 (`loadRoomFromDb`), engine-dev #21 (FPV menu + sandbox fix) — both open. **Scene-mounting bug sweep (2026-06-02 session 4):** ROOT CAUSE of "scene switching doesn't work" black screen = `TouchProvider.mount()` stamped inline `container.style.position='relative'` that was never restored on unmount → after `engine.unmount()` removed the canvas, the container had 0 content height → second `engine.mount()` read `clientHeight=0` → zero-height renderer (SHARED `@base/input` fix: save/restore prior position, only override when unset). Plus 5 remount-state/GPU bugs in `GameplaySceneModule`/`SandboxSceneModule`: `_exitTriggered`/`_devTimeScale`/dilation not reset in `onMount()` (exit zones permanently dead + sandbox starts frozen after pause→picker→reload); `scene.clear()` left GPU buffers undisposed (default disc/ring/capsule, grid+axis helpers, placed GLBs). All verified live via preview — canvas 1280×720 on 2nd+ mount, inline style cleared on unmount, room renders.
 Broken: Swimming clips unconfirmed, camera-relative movement (movementBasis)
 Blocker: Terrain surface-normal API not exposed (needed for uphill lean animation)
-Next: S5 Animation Recorder. Personal Planner L2-S2 Tags also queued.
+Next: S5 Animation Recorder — `capturePose()` as keyframe primitive → `QuaternionKeyframeTrack` → `GLTFExporter` → Dexie animation-pack. Then Personal Planner L2-S2 Tags.
 
 ---
 

@@ -3,7 +3,7 @@ import { ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { InputModule, mergeBindings } from '@base/input'
-import { loadRoomPackage, type LoadedRoomPackage } from '@base/ui'
+import { loadRoomPackage, loadRoomFromDb, assetDb, type LoadedRoomPackage } from '@base/ui'
 import { useInputSettings } from '@/composables/useInputSettings'
 import { useShellContext } from '@/composables/useShellContext'
 import { RoomPlayerModule } from '@/modules/RoomPlayerModule'
@@ -33,9 +33,10 @@ const sceneLabel  = ref('')
 const isDragOver  = ref(false)
 
 let currentPkg: LoadedRoomPackage | null = null
+let isSwitching = false
 
 async function bootRoom(file: File): Promise<void> {
-  if (viewState.value === 'loading') return
+  if (viewState.value === 'loading' || viewState.value === 'playing') return
   viewState.value = 'loading'
   errorMsg.value  = ''
   try {
@@ -51,6 +52,7 @@ async function bootRoom(file: File): Promise<void> {
     await sceneModule.loadRoom(pkg)
 
     viewState.value = 'playing'
+    window.addEventListener('keydown', onKeyDown)
     container.value.focus()
   } catch (e) {
     viewState.value = 'idle'
@@ -60,6 +62,7 @@ async function bootRoom(file: File): Promise<void> {
 }
 
 async function exitRoom(): Promise<void> {
+  window.removeEventListener('keydown', onKeyDown)
   if (viewState.value === 'playing') {
     await engine.unmount()
     currentPkg?.revoke()
@@ -67,6 +70,59 @@ async function exitRoom(): Promise<void> {
   }
   viewState.value = 'idle'
   sceneLabel.value = ''
+}
+
+// ── Environment menu (E key) ──────────────────────────────────────────────────
+
+async function switchToScene(sceneId: string): Promise<void> {
+  if (isSwitching) return
+  isSwitching = true
+  sceneModule.hideEnvironmentMenu()
+  try {
+    const pkg = await loadRoomFromDb(sceneId)
+    const prevPkg = currentPkg
+    currentPkg = pkg
+    sceneLabel.value = pkg.manifest.sceneLabel
+    await sceneModule.unloadRoom()
+    prevPkg?.revoke()           // revoke after unload — no blob URL access during teardown
+    await sceneModule.loadRoom(pkg)
+  } catch (e) {
+    console.error('[RoomPlayerView] Scene switch failed:', e)
+  } finally {
+    isSwitching = false
+  }
+}
+
+function onKeyDown(e: KeyboardEvent): void {
+  if (viewState.value !== 'playing') return
+
+  if (e.code === 'KeyE') {
+    e.preventDefault()
+    if (sceneModule.isEnvironmentMenuVisible) {
+      sceneModule.hideEnvironmentMenu()
+    } else {
+      assetDb.scenes.toArray()
+        .then(scenes => { sceneModule.showEnvironmentMenu(scenes) })
+        .catch(err => { console.warn('[RoomPlayerView] Failed to load scenes:', err) })
+    }
+    return
+  }
+
+  if (!sceneModule.isEnvironmentMenuVisible) return
+
+  if (e.code === 'ArrowUp') {
+    e.preventDefault()
+    sceneModule.navigateEnvironmentMenu(-1)
+  } else if (e.code === 'ArrowDown') {
+    e.preventDefault()
+    sceneModule.navigateEnvironmentMenu(1)
+  } else if (e.code === 'Enter') {
+    e.preventDefault()
+    const id = sceneModule.getSelectedSceneId()
+    if (id) switchToScene(id)
+  } else if (e.code === 'Escape') {
+    sceneModule.hideEnvironmentMenu()
+  }
 }
 
 // ── Drag-drop ─────────────────────────────────────────────────────────────────
@@ -93,6 +149,7 @@ function onFileInput(e: Event): void {
 }
 
 onUnmounted(async () => {
+  window.removeEventListener('keydown', onKeyDown)
   if (viewState.value === 'playing') await engine.unmount()
   currentPkg?.revoke()
   currentPkg = null
@@ -125,7 +182,7 @@ onUnmounted(async () => {
       </div>
       <div class="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-none">
         <p class="text-white/20 text-[10px] tracking-widest uppercase text-center">
-          WASD move · Mouse look · Tab camera · Shift sprint
+          WASD move · Mouse look · Tab camera · Shift sprint · E environments
         </p>
       </div>
     </template>

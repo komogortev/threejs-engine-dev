@@ -433,6 +433,25 @@ export class GameplaySceneModule extends BaseModule {
   protected async onMount(_container: HTMLElement, context: EngineContext): Promise<void> {
     const ctx = context as ThreeContext
 
+    // Reset volatile per-session state so reused module instances don't bleed
+    // state across unmount→remount cycles (e.g. sandbox scene picker round-trips,
+    // three-dreams scene transitions). Inert for sandbox (secretDoubleJump disabled)
+    // but a narrative scene reusing this module would otherwise see a stale
+    // secretConsumed=true suppress the secret jump on a second visit.
+    this._exitTriggered = false
+    this._exitZoneDwell = []
+    this._devTimeScale = 1.0
+    this._devPendingFrames = 0
+    this._dilationActive = false
+    this._dilationCurrentScale = 1.0
+    this.jumpHeld = false
+    this.secretWindowOpen = false
+    this.secretWindowTimer = 0
+    this.secretSecondJumpTriggered = false
+    this.secretPendingWinOnLand = false
+    this.secretConsumed = false
+    this.slowmoRemainingSeconds = 0
+
     if (this.descriptor) {
       const result = await SceneBuilder.build(ctx, this.descriptor, createSceneBuildOptions())
       if (!result.character || result.characterTerrainYOffset === undefined) {
@@ -526,6 +545,12 @@ export class GameplaySceneModule extends BaseModule {
       debugClipResolution: this.cfg.debugClipResolution,
     })
 
+    // Reset camera mode to configured initial state so a remount (same module
+    // instance, second scene load) starts clean instead of inheriting the mode
+    // from the previous session — e.g. first-person hides the character and
+    // positions the camera inside the mesh, producing a black screen.
+    this.gameplayCam.setMode(this.cfg.cameraMode ?? 'third-person')
+
     this.coordinator.mount(context.eventBus)
     this.coordinator.initCamera(ctx.camera, this.character)
 
@@ -579,6 +604,18 @@ export class GameplaySceneModule extends BaseModule {
     this.environment = null
 
     const ctx = this.context as ThreeContext
+    // Dispose GPU resources for all remaining scene objects (default disc/ring/character,
+    // exit zone rings, sun orb, nav mesh) before clearing — scene.clear() only removes
+    // the references; without dispose() the GPU buffers and textures leak each remount.
+    ctx.scene.traverse(child => {
+      const mesh = child as THREE.Mesh
+      if (mesh.isMesh) {
+        mesh.geometry?.dispose()
+        const mat = mesh.material
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose())
+        else (mat as THREE.Material)?.dispose()
+      }
+    })
     ctx.scene.clear()
     ctx.scene.background = null
     ctx.scene.fog        = null

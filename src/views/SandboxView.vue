@@ -147,10 +147,18 @@ async function startSandbox(sceneId: string): Promise<void> {
   if (!container.value) return
   selectedSceneId.value = sceneId
   worldReady.value = false
-  await engine.mount(container.value, context)
-  await engine.mountChild('input', inputModule)
-  await engine.mountChild('scene', sceneModule)
-  await sceneModule.loadPlacedObjects(sceneId)
+  timeScale.value = 1.0   // reset HUD — module resets its own _devTimeScale in onMount
+  try {
+    await engine.mount(container.value, context)
+    await engine.mountChild('input', inputModule)
+    await engine.mountChild('scene', sceneModule)
+    await sceneModule.loadPlacedObjects(sceneId)
+  } catch (err) {
+    console.error('[SandboxView] scene mount failed:', err)
+    await engine.unmount().catch(() => {})
+    selectedSceneId.value = null   // return to picker so user can retry
+    return
+  }
   worldReady.value = true
 
   container.value.focus()
