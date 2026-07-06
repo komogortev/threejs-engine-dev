@@ -17,4 +17,9 @@ if (import.meta.env.DEV) {
     w.__clearSpaceHome = clearSpaceHome
     console.log('[dev] __seedSpaceHome(opts?) | __clearSpaceHome() available')
   })
+  import('./utils/s5AnimSpike').then(({ s5AnimSpike }) => {
+    const w = window as unknown as Record<string, unknown>
+    w.__s5AnimSpike = s5AnimSpike
+    console.log('[dev] __s5AnimSpike(url?) available')
+  })
 }
