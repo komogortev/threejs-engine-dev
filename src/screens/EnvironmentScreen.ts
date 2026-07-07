@@ -2,14 +2,14 @@ import * as THREE from 'three'
 import type { SceneRow } from '@base/ui'
 
 /**
- * In-world projection screen for environment selection.
+ * In-camera projection screen for environment selection.
  *
- * A self-lit PlaneGeometry with a CanvasTexture displaying the list of saved
- * scenes from the editor database.  Placed in the Three.js scene — no Vue
- * overlay.  Positioned in front of the camera when shown.
+ * A self-lit PlaneGeometry with a CanvasTexture parented to the active camera
+ * so it tracks rotation and stays centred in view until dismissed.  The mesh
+ * must be added with `camera.add(screen.mesh)` in the host module's onMount.
  *
  * Usage:
- *   screen.show(scenes, camera)   // open and position
+ *   screen.show(scenes)           // open (camera parenting provides position)
  *   screen.navigate(1 | -1)       // move selection down / up
  *   screen.getSelectedId()        // get the chosen SceneRow id
  *   screen.hide()                 // close
@@ -31,9 +31,14 @@ export class EnvironmentScreen {
     this._texture = new THREE.CanvasTexture(this._canvas)
 
     const geo = new THREE.PlaneGeometry(3, 1.5)
+    // Flip UV X to compensate for rotation.y = π below — without this the
+    // texture would be mirrored left-right when the front face turns toward -Z.
+    const uvAttr = geo.attributes.uv as THREE.BufferAttribute
+    for (let i = 0; i < uvAttr.count; i++) uvAttr.setX(i, 1 - uvAttr.getX(i))
+    uvAttr.needsUpdate = true
+
     const mat = new THREE.MeshBasicMaterial({
       map: this._texture,
-      side: THREE.DoubleSide,
       transparent: true,
       depthTest: false,
     })
@@ -41,13 +46,17 @@ export class EnvironmentScreen {
     this.mesh.visible = false
     this.mesh.renderOrder = 999
     this.mesh.name = 'env-screen'
+    // Fixed position in camera-local space: centred, slightly below sight-line, 3 m forward.
+    // The host adds this mesh with camera.add() so it tracks rotation automatically.
+    this.mesh.position.set(0, -0.15, -3)
+    // Rotate 180° around Y so the front face (with texture) points toward the camera (-Z).
+    this.mesh.rotation.y = Math.PI
   }
 
-  /** Open the menu, position it in front of the camera, and display scenes. */
-  show(scenes: SceneRow[], camera: THREE.PerspectiveCamera): void {
+  /** Open the menu and display scenes.  The mesh must already be a camera child. */
+  show(scenes: SceneRow[]): void {
     this._scenes = scenes
     this._selectedIdx = 0
-    this._reposition(camera)
     this._draw()
     this.mesh.visible = true
   }
@@ -75,15 +84,6 @@ export class EnvironmentScreen {
     this._texture.dispose()
     this.mesh.geometry.dispose()
     ;(this.mesh.material as THREE.MeshBasicMaterial).dispose()
-  }
-
-  private _reposition(camera: THREE.PerspectiveCamera): void {
-    const dir = new THREE.Vector3()
-    camera.getWorldDirection(dir)
-    // Place 3 m in front of the camera, at a comfortable eye height
-    this.mesh.position.copy(camera.position).addScaledVector(dir, 3)
-    this.mesh.position.y = Math.max(this.mesh.position.y, 1.2)
-    this.mesh.lookAt(camera.position)
   }
 
   private _draw(): void {

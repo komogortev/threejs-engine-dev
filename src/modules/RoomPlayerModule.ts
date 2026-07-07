@@ -50,7 +50,8 @@ export class RoomPlayerModule extends GameplaySceneModule {
     }
 
     this.envScreen = new EnvironmentScreen()
-    ctx.scene.add(this.envScreen.mesh)
+    // Parent to the camera so the screen tracks rotation and stays in view.
+    ctx.camera.add(this.envScreen.mesh)
   }
 
   /**
@@ -81,8 +82,7 @@ export class RoomPlayerModule extends GameplaySceneModule {
   // ── Environment menu ──────────────────────────────────────────────────────
 
   showEnvironmentMenu(scenes: SceneRow[]): void {
-    const ctx = this.context as ThreeContext
-    this.envScreen?.show(scenes, ctx.camera)
+    this.envScreen?.show(scenes)
   }
 
   hideEnvironmentMenu(): void {
@@ -106,8 +106,8 @@ export class RoomPlayerModule extends GameplaySceneModule {
   protected override async onUnmount(): Promise<void> {
     await this.unloadRoom()
     if (this.envScreen) {
-      this.envScreen.dispose()
       this.envScreen.mesh.parent?.remove(this.envScreen.mesh)
+      this.envScreen.dispose()
       this.envScreen = null
     }
     await super.onUnmount()
