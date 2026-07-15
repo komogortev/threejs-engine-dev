@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "fflate": "^0.8.2",
     "@types/three": "^0.172.0",
     "@vitejs/plugin-vue": "^5.2.3",
     "@vue/tsconfig": "^0.7.0",
