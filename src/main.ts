@@ -27,4 +27,10 @@ if (import.meta.env.DEV) {
     w.__s5cRoomZip = s5cRoomZip
     console.log('[dev] __s5cRoomZip(charUrl?) available')
   })
+  import('./utils/seedXBot').then(({ seedXBot, clearXBot }) => {
+    const w = window as unknown as Record<string, unknown>
+    w.__seedXBot = seedXBot
+    w.__clearXBot = clearXBot
+    console.log('[dev] __seedXBot() | __clearXBot() available')
+  })
 }
