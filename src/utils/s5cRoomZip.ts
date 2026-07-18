@@ -63,7 +63,7 @@ export async function s5cRoomZip(charUrl = '/models/dfist_base.glb'): Promise<Ui
   rec.addKeyframe(2, rest)
   const clip = rec.build(CLIP_NAME)
 
-  const packBlob = await exportAnimationGlb(gltf.scene, clip)
+  const packBlob = await exportAnimationGlb(gltf.scene, [clip])
   const packBytes = new Uint8Array(await packBlob.arrayBuffer())
 
   const scene: RoomPackageScene = {
