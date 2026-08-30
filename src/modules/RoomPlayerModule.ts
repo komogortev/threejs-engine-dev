@@ -1,9 +1,10 @@
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import { MusicLayer } from '@base/audio'
-import type { LoadedRoomPackage, SceneRow } from '@base/ui'
+import { createEditorGltfLoader } from '@base/ui'
+import type { EditorNpcEntry, LoadedRoomPackage, SceneRow } from '@base/ui'
+import type { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { GameplaySceneModule } from './GameplaySceneModule'
 import { EnvironmentScreen } from '@/screens/EnvironmentScreen'
 
@@ -22,6 +23,7 @@ import { EnvironmentScreen } from '@/screens/EnvironmentScreen'
  */
 export class RoomPlayerModule extends GameplaySceneModule {
   private placedMeshes: THREE.Object3D[] = []
+  private npcMixers: THREE.AnimationMixer[] = []
   private audioCtx: AudioContext | null = null
   private musicLayer: MusicLayer | null = null
   private envScreen: EnvironmentScreen | null = null
@@ -52,6 +54,13 @@ export class RoomPlayerModule extends GameplaySceneModule {
     this.envScreen = new EnvironmentScreen()
     // Parent to the camera so the screen tracks rotation and stays in view.
     ctx.camera.add(this.envScreen.mesh)
+
+    // Opt-in introspection handle (?roomdebug) — headless previews suspend rAF,
+    // so mixer/scene state must be drivable from the console. Same pattern as
+    // the editor's ?editordebug handle.
+    if (new URLSearchParams(window.location.search).has('roomdebug')) {
+      ;(window as unknown as Record<string, unknown>).__roomPlayer = { module: this, ctx }
+    }
   }
 
   /**
@@ -59,6 +68,8 @@ export class RoomPlayerModule extends GameplaySceneModule {
    * Call this before loadRoom() when switching environments in-place.
    */
   async unloadRoom(): Promise<void> {
+    for (const mixer of this.npcMixers) mixer.stopAllAction()
+    this.npcMixers = []
     this.musicLayer?.stop(0.5)
     this.musicLayer?.dispose()
     this.musicLayer = null
@@ -105,6 +116,7 @@ export class RoomPlayerModule extends GameplaySceneModule {
 
   protected override async onUnmount(): Promise<void> {
     await this.unloadRoom()
+    delete (window as unknown as Record<string, unknown>).__roomPlayer
     if (this.envScreen) {
       this.envScreen.mesh.parent?.remove(this.envScreen.mesh)
       this.envScreen.dispose()
@@ -119,7 +131,9 @@ export class RoomPlayerModule extends GameplaySceneModule {
    */
   async loadRoom(pkg: LoadedRoomPackage): Promise<void> {
     const ctx = this.context as ThreeContext
-    const loader = new GLTFLoader()
+    // Factory loader (Draco + Meshopt) — plain GLTFLoader rejects the platform's
+    // own compressed assets (decimated characters, optimized props).
+    const loader = createEditorGltfLoader()
 
     // ── Placed objects (furniture / props) ───────────────────────────────────
     for (const obj of pkg.scene.placedObjects) {
@@ -142,7 +156,7 @@ export class RoomPlayerModule extends GameplaySceneModule {
       }
     }
 
-    // ── NPCs (static — no animation in V1) ───────────────────────────────────
+    // ── NPCs (S5-c: looping clip from bound animation pack, static pose fallback) ─
     for (const npc of pkg.scene.npcs) {
       if (!npc.assetId) continue
       const blobUrl = pkg.assetBlobUrls.get(npc.assetId)
@@ -153,8 +167,13 @@ export class RoomPlayerModule extends GameplaySceneModule {
       try {
         const gltf = await loader.loadAsync(blobUrl)
 
-        // Apply authored pose overrides before any AnimationMixer is created
-        if (npc.poseOverride && npc.poseOverride.length > 0) {
+        // Recorded packs take the embedded/as-is clip path — same-skeleton clips
+        // need no retarget, and the Mixamo sanitize/retarget pass would mangle them.
+        const action = await this._startNpcClip(npc, pkg, loader, gltf.scene)
+
+        // Precedence (OD-5): a playing clip wins over poseOverride — the mixer
+        // rewrites bone quaternions every frame. Static pose is the fallback.
+        if (!action && npc.poseOverride && npc.poseOverride.length > 0) {
           const skinnedMeshes: THREE.SkinnedMesh[] = []
           gltf.scene.traverse(obj => { if (obj instanceof THREE.SkinnedMesh) skinnedMeshes.push(obj) })
           const sm = skinnedMeshes[0]
@@ -203,5 +222,60 @@ export class RoomPlayerModule extends GameplaySceneModule {
         }
       }
     }
+  }
+
+  /**
+   * Start the NPC's bound animation clip, if any. Returns the playing action,
+   * or null when no pack is bound / the pack fails to load — callers fall back
+   * to the static poseOverride.
+   *
+   * Clips are consumed embedded/as-is (no Mixamo retarget): packs recorded in
+   * the editor target the same skeleton, so their `${bone}.quaternion` tracks
+   * bind directly against the character's bone nodes.
+   *
+   * Caveats accepted for S5-c: (1) packs are self-contained (mesh+skeleton ride
+   * along per OD-1) — the duplicate scene payload is parsed then dropped to GC,
+   * a transient cost per NPC; (2) a started action ≠ bound tracks — PropertyBinding
+   * resolves lazily on first mixer.update(), so a pack whose track names don't
+   * match this character plays nothing (console warnings) instead of falling
+   * back to poseOverride.
+   */
+  private async _startNpcClip(
+    npc: EditorNpcEntry,
+    pkg: LoadedRoomPackage,
+    loader: GLTFLoader,
+    characterScene: THREE.Object3D,
+  ): Promise<THREE.AnimationAction | null> {
+    if (!npc.animationPackAssetId) return null
+    const packUrl = pkg.assetBlobUrls.get(npc.animationPackAssetId)
+    if (!packUrl) {
+      console.warn(`[RoomPlayer] Anim pack ${npc.animationPackAssetId} missing for "${npc.entityId}" — static pose fallback`)
+      return null
+    }
+    try {
+      const packGltf = await loader.loadAsync(packUrl)
+      const clips = packGltf.animations
+      if (clips.length === 0) {
+        console.warn(`[RoomPlayer] Anim pack for "${npc.entityId}" has no clips — static pose fallback`)
+        return null
+      }
+      let clip = npc.defaultClip ? THREE.AnimationClip.findByName(clips, npc.defaultClip) : null
+      if (npc.defaultClip && !clip) {
+        console.warn(`[RoomPlayer] Clip "${npc.defaultClip}" not in pack for "${npc.entityId}" — using "${clips[0].name}"`)
+      }
+      clip = clip ?? clips[0]
+      const mixer = new THREE.AnimationMixer(characterScene)
+      const action = mixer.clipAction(clip)
+      action.play() // default LoopRepeat — looping idle/gesture
+      this.npcMixers.push(mixer)
+      return action
+    } catch (e) {
+      console.warn(`[RoomPlayer] Anim pack load failed for "${npc.entityId}":`, e)
+      return null
+    }
+  }
+
+  protected override onAfterGameplayTick(simDelta: number, _ctx: ThreeContext): void {
+    for (const mixer of this.npcMixers) mixer.update(simDelta)
   }
 }
