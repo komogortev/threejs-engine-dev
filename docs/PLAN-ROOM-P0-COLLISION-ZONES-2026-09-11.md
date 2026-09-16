@@ -149,7 +149,55 @@ walkthrough *(inference, to confirm in the playtest)*.
 
 ---
 
-## 3. Order
+
+---
+
+## 3. Visual / functional pass — the owner's checklist
+
+Added 2026-09-16. **Nothing in this plan has been seen running.** The 09-04 inventory was source-only (hidden
+pane → canvas 0×0, rAF suspended), and the 09-16 session prepared a live pane but the pass did not happen. So the
+capability table in §1 of the inventory is *source-verified, not eye-verified*, and every calibration below is still
+owner-only. This checklist exists so that pass does not have to be reconstructed from a chat log.
+
+### Setup
+
+```
+dev server : threejs-engine-dev, port 5174 (.claude/launch.json)
+seed hooks : window.__seedSpaceHome()  → 6 environment GLBs + a saved scene named "space home"
+             window.__seedXBot()       → X Bot character into the asset library
+             window.__s5cRoomZip()     → builds a room ZIP in-page (for /room without a file download)
+```
+
+The asset library and saved scenes live in **IndexedDB, per browser profile** — a fresh browser starts empty and
+seeding is required. `__seedSpaceHome()` currently writes its wall asset **twice** (duplicate row, same name);
+harmless, but it is a real idempotence bug in the seed hook, not a display artefact.
+
+### What to check, and what should be true
+
+| # | Action | Expected | Reads on |
+|---|---|---|---|
+| 1 | Asset Library — drop a GLB | thumbnail + a kind badge; upload lints warn-only | F-A1 + F-G5 |
+| 2 | Place a prop, move with T/R/S, `Ctrl+Z` | gizmo transforms; one-step revert of the last drag | C-5, C-10 |
+| 3 | Add an NPC, bind X Bot, pose a bone | DFS bone tree, bone gizmo, pose holds | S4 |
+| 4 | Anim tab — capture 3 keyframes, preview | **bones actually move in a real frame** | **the outstanding ~30 s glance** |
+| 5 | Export a pack, then ▶ in the Asset tab | clip auditions on the NPC | S5-d |
+| 6 | Add an exit zone, set a target scene id | ring renders; fields accept values | C-2 |
+| 7 | Export the room ZIP → `/room` → drop it | room loads, NPC animates, ambient audio plays | S5-c |
+| 8 | Walk into a wall | **you pass through it** — expected, this is P0-1 | C-1 |
+| 9 | Walk into the exit zone | **nothing happens** — expected, this is P0-2 | C-2 |
+| 10 | Press `E`, pick a scene, `Enter` | environment menu switches rooms | FPV env menu |
+
+Rows 8 and 9 are the two P0s: they are listed so the pass distinguishes *known gap* from *new breakage*.
+
+### What only the owner can judge
+
+Not measurable from source, and unchanged since the inventory: eye height (`firstPersonEyeOffsetY: 1.675`),
+locomotion speed and turn rate (inherited from a combat sandbox, never tuned for walking), FOV, the `0x111111` void
+beyond the room, and whether the character auto-fit clamp silently rescaled a model that was actually correct.
+
+---
+
+## 4. Order
 
 1. **P0-2** (engine-dev only, no Rapier decision needed)
 2. **P0-1 SHARED additions** 1g + 1h (one PR)
