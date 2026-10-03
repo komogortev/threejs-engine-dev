@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { DEFAULT_BINDINGS, InputModule, mergeBindings } from '@base/input'
 import { useInputSettings } from '@/composables/useInputSettings'
@@ -10,6 +10,7 @@ import { useShellContext } from '@/composables/useShellContext'
 import { assetDb, type SceneRow, type SandboxSceneSave } from '@base/ui'
 
 const router  = useRouter()
+const route   = useRoute()
 const context = useShellContext()
 const container = ref<HTMLElement>()
 
@@ -178,6 +179,9 @@ onMounted(async () => {
   await migrateLocalStorage()
   await loadScenesList()
   window.addEventListener('keydown', onKeyDown)
+  // `/sandbox?scene=<id>` — the Scenes screen's Sandbox action; skips the picker.
+  const wanted = typeof route.query.scene === 'string' ? route.query.scene : null
+  if (wanted && scenes.value.some(s => s.id === wanted)) await startSandbox(wanted)
 })
 
 onUnmounted(async () => {

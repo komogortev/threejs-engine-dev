@@ -10,19 +10,22 @@
 -->
 <template>
   <div class="page">
-    <SceneEditorView :scenes="sceneEntries" />
+    <SceneEditorView :scenes="sceneEntries" :open-scene-id="openSceneId" />
     <button class="back-btn" @click="router.push('/')">← Back</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { SceneEditorView } from '@base/ui'
 import type { SceneEditorEntry } from '@base/ui'
 import { HARNESS_EDITOR_SCENES } from '@/scenes/editor/registry'
 import { getEditorConfig } from '@/scenes/editor/configs'
 
 const router = useRouter()
+const route = useRoute()
+/** `/editor?scene=<id>` — the Scenes screen's Edit. */
+const openSceneId = typeof route.query.scene === 'string' ? route.query.scene : undefined
 
 const sandboxEntry: SceneEditorEntry = {
   id: '__sandbox__',
