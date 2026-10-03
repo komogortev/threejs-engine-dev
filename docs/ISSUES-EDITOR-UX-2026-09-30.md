@@ -9,16 +9,18 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
 
 | # | Issue | Class | Status |
 |---|---|---|---|
-| E1 | Menu "Load Room" is really scene import | naming | label **done, uncommitted**; code names open |
-| E2 | Three overlapping ways to open a scene | information architecture | open — decision needed |
-| E3 | Saved Scenes section duplicates the scene dropdown | redundancy | collapsed-by-default **done, uncommitted (SHARED)**; removal surface open |
-| E4 | "Scene Settings" row reads as a section title | affordance | open |
-| E5 | NPC character mesh not shown unless Pose tab is active | **bug / design gap** | open — largest item |
-| E6 | Asset Library dialog appears open on editor load | — | **closed 2026-09-30** — owner: editor loads fine; no evidence of a defect |
+| E1 | Menu "Load Room" is really scene import | naming | label **shipped** (#33); code keeps `room` by owner decision |
+| E2 | Three overlapping ways to open a scene | information architecture | **closed 2026-10-03** — single Scenes entry (#33) |
+| E3 | Saved Scenes section duplicates the scene dropdown | redundancy | **closed 2026-10-03** — Saved Scenes panel removed from the editor; delete/manage lives on `/scenes` |
+| E4 | "Scene Settings" row reads as a section title | affordance | **closed 2026-10-03** — Scene Settings is a button-styled tool row (E9) |
+| E5 | NPC character mesh not shown unless Pose tab is active | **bug / design gap** | **closed 2026-10-03** — persistent NPC models (SHARED #54, engine-dev #35); plan `PLAN-E5-NPC-DISPLAY-MESH-2026-10-03.md` |
+| E6 | Asset Library dialog appears open on editor load | **bug** | **reopened and fixed 2026-10-03** — it was real (see E6 section); SHARED fix/ui-editor-click-targets |
 | E7 | Path / waypoints: no purpose, no preview, no storage, no triggers, no speed | **missing capability** (R1 gap) | open — needs design |
 | E8 | Animations work (owner-verified) but have no triggers / time programming | **missing capability** (same gap as E7) | open — design jointly with E7 |
-| E9 | Left panel: inconsistent add flows, misnamed "Player", list placement, no collapse | information architecture | open — absorbs E4; design agreed in outline below |
-| E10 | No import of a scene (ZIP) into the editor — only play via `/room` | **missing capability** | open — the empty *(edit × ZIP)* cell of E2's table |
+| E9 | Left panel: inconsistent add flows, misnamed "Player", list placement, no collapse | information architecture | **built 2026-10-03** (SHARED feat/ui-hierarchy-sections, awaiting merge); owner visual pass pending |
+| E10 | No import of a scene (ZIP) into the editor — only play via `/room` | **missing capability** | **closed 2026-10-03** — import into the editor library (SHARED #53) |
+| E11 | Right-side editor buttons click unreliably (T/R/S, Transform to Anim tabs) | **bug (UI reliability)** | **partly fixed 2026-10-03** (ghost dialog, bigger targets); the first-click symptom is not reproduced, owner retest pending |
+| E12 | T / R / S transform the NPC **marker**, not the model (rotate and scale have no effect on the model) | **bug (E5 follow-up)** | open, design below; **next after E9** |
 
 ## E1 — "Load Room" → "Import Scene"
 
@@ -77,10 +79,13 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
 - **Structural note:** `useSceneEditorViewport.ts` is ~2,000 lines. The NPC-mesh logic should land as an L1 module (editor layering: L0/L1/L2, no L1→L1, context = engine handles only), not more lines in the composable. Check the structural gate before and after.
 - **Acceptance:** set a mesh → it appears immediately · select another object → it stays · reload a saved scene → it appears · two NPCs with the same asset both appear · pose editing still works on the selected NPC and does not leave a duplicate.
 
-## E6 — Asset Library dialog seems open on editor load  *(CLOSED)*
+## E6 — Asset Library dialog left laid out while closed  *(REOPENED, fixed 2026-10-03)*
 
-- **Was:** one early screenshot of `/editor` showed an "Asset Library" dialog; a later DOM measurement read it at 2×2 px, so it was inconclusive.
-- **Closed:** owner confirms the scene editor loads fine, and nothing else supports a defect. Most likely a mid-transition frame in that screenshot. Reopen only with a reproducible sighting.
+- **History:** closed 2026-09-30 on a single 2×2 px measurement ("inconclusive, probably a mid-transition frame"). That was a wrong reading of weak evidence: the defect was real and every screenshot taken since showed it as a clipped panel fragment over the inspector's left edge.
+- **Measured 2026-10-03:** `dialog.asset-lib-dialog` has `open = false` but computed `display: flex`, 560 × 202 px, `position: absolute` at x 232–792, y 92–294. Its inner header intercepts clicks over the canvas and over the left ~28 px of the inspector (Entity ID, Label, Position, Scale fields).
+- **Cause:** `AssetLibraryDialog.vue` scoped style sets `display: flex` on the `<dialog>` itself, which overrides the browser's `dialog:not([open]) { display: none }`. The other two dialogs (`asset-detail-dialog`, `asset-picker`) do not have the override and were `display: none`.
+- **Fix:** the rule applies only to `.asset-lib-dialog[open]`. After: all three dialogs `display: none` while closed, zero sampled points hit a dialog, and the library still opens modally and closes on Escape.
+- **Lesson (R3):** an absence claim names the artifact that would prove the opposite and reads it. "Appears at 2×2 px" was not that artifact; `getComputedStyle(...).display` was.
 
 ## E7 — Path / waypoints: an unfinished feature, not a bug
 
@@ -164,6 +169,10 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
   - **Q-E9-3:** persist collapse state across sessions? Recommended: no (derive from selection on mount).
 - **Structure:** this is a refactor of one 300-line SFC into a shared `HierarchySection` (header, count, `+`, collapse, rows slot) used by all three — consistent by construction. Interacts with E5 (NPC display mesh) only through the NPC row; no ordering constraint.
 - **Acceptance:** all three sections look and behave identically; add → new object appears in its own section, selected, section open; selecting in the viewport opens the matching section; no section open on a fresh load; "Player View" named and styled as a view control; no row reads as a heading.
+- **Built 2026-10-03:** `HierarchySection` (shared header: chevron + title + count + "+", rows below) used by NPCs, Objects, Zones, so they cannot drift; Scene Settings and **Player View** are button-styled tool rows above them; sections start collapsed and open on a selection of their kind (`hierarchy/sectionForSelection.ts`, pure, 7 tests with negative controls). The Saved Scenes panel and the old Assets launcher section are gone (`SceneEditorSavedScenesSection.vue`, `SceneEditorAssetsSection.vue` deleted; E3 closes with them because delete now lives on `/scenes`).
+- **Verified in the editor:** fresh load = three identical collapsed sections; "+" on NPCs / Zones creates the object in its own section, selects it and opens the section; collapsing while that object stays selected sticks; selecting in the viewport opens the matching section; the Objects "+" opens the asset library.
+- **Decisions taken (recommended options):** Q-E9-2 name = **Objects**; Q-E9-3 collapse state is **not** persisted. **Q-E9-1 deferred, working flow unchanged:** placing an asset is still pick-in-library then click-the-floor (the doc recommended instant create-at-default; that changes a working flow and needs your confirmation). **Dropped from the design:** the separate "Asset library…" entry, because the Objects "+" opens the same dialog (upload, browse, delete and Use).
+- **Also changed:** "×" remove buttons are visible at rest (dimmed) and 22 px instead of appearing on hover at ~14 px; section "+" is 24 px (was 16).
 
 ## E10 — No way to import a scene into the editor  *(owner, 2026-10-03)*
 
@@ -173,6 +182,39 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
 - **Decisions the importer needs (R5, enumerate before building):** asset-id collision policy (same id → reuse; different content under the same id → ?), scene-name collision (rename vs overwrite), what the package does not carry (waypoints are `localStorage`-only, E7), and the schema version check (`manifest.version`).
 - **Proposed fix (Recommended):** `importRoomPackageToDb(zipBytes)` in `@base/ui` (unzip → upsert assets → insert scene row → return sceneId), an "Import scene…" action in the editor's scene switcher / the E2 "Scenes" surface, and a round-trip test (export → import → deep-equal scene). Belongs in E2's table as the *(edit × ZIP)* cell, currently empty.
 - **Acceptance:** export a scene, clear it from Dexie, import the ZIP in the editor → same placed objects, NPCs (with clips), zones, spawn, audio; assets present; re-import does not duplicate assets.
+
+## E11 — Right-side editor buttons click unreliably  *(owner, 2026-10-03)*
+
+- **Saw (owner `[stated]`):** the T / R / S gizmo buttons and the inspector tabs (Transform, Path, Asset, Pose, Anim) are hard to click. He can only activate the option they represent by clicking them **sequentially**, i.e. a click lands only after a previous one.
+- **Basis:** not yet reproduced or traced. Hypotheses, none confirmed:
+  1. **Overlap.** The harness page overlays an absolutely positioned `← Back` button (`SceneEditorPage.vue`, `z-index: 20`, top/right 10 px) on the inspector header, over the tab row. Every screenshot this session shows it sitting on the right edge of the tab bar, and a clipped panel fragment (the Asset Library dialog) overlapping the inspector's left edge around x≈600. Either can intercept clicks.
+  2. **Pointer capture / focus.** TransformControls and OrbitControls attach listeners to the canvas / `window`; a pointer capture or `pointerup` handler that is still armed could swallow the first click on a button outside the canvas, so the second click lands.
+  3. **Re-render under the pointer.** Selection-driven re-renders of the inspector (tab content or the NPC row) between `mousedown` and `mouseup` would drop the click.
+- **Checked 2026-10-03, in the browser pane:**
+  - `elementFromPoint` at every T/R/S button, tab and the Back button centre: each receives its own click. **Hypothesis 1 (overlap at the centres) refuted.**
+  - A MutationObserver on the inspector, toolbar and camera buttons for 3 s idle: 0 mutations, buttons stay connected. **Hypothesis 3 (re-render under the pointer) refuted at idle.**
+  - Real clicks activate R, S and the Anim tab on the first click, including right after an orbit drag on the canvas. **Hypothesis 2 (pointer capture / first click after canvas) not reproduced** with synthetic input; hardware-specific behaviour is not excluded.
+  - No global `pointerdown` / `pointerup` / `click` listener in `packages/ui/src/editor` could swallow a click (the only `window` listeners are `keydown`, `keyup`, `mousemove`, `resize`).
+- **Found and fixed while looking:** (a) the ghost Asset Library dialog (E6) took clicks over the canvas and the inspector's left edge; (b) the targets were small: T/R/S 24 × 24 px and tabs ~31 px tall, in a crowded top-right cluster (camera buttons, T/R/S, tabs, Back). Now T/R/S 32 × 32 px with a 6 px gap and tabs ~41 px tall.
+- **Not explained:** "only reliable when clicked sequentially". Needed from the owner (he is the reconciliation layer here): window size, and what a failed click does (nothing / wrong option / needs a second click), and whether it fails more often right after using the canvas.
+- **Why it matters:** E9 rebuilds the left panel and every acceptance test in the fix session assumes the right panel is clickable.
+- **Acceptance:** each T/R/S button and each inspector tab activates on its first click, in a fresh load and after canvas interaction (orbit, gizmo drag, selection change), on the owner's own window and input device.
+
+## E12 — T / R / S act on the marker, not the model  *(owner, 2026-10-03)*
+
+- **Saw (owner `[stated]`):** with an NPC selected, Translate / Rotate / Scale change the marker, not the model. His model of the tool: **the markers are identification** (a pin that says "this is an NPC, this one is selected"), and using the gizmo he expects **the model** to be transformed, not necessarily the marker.
+- **Basis:** code-read, not yet reproduced as a screenshot. The gizmo (`TransformControls`) is attached to the marker root (`markers.npcRoot`, attach sites in `useSceneEditorViewport.ts` around lines 1002, 1174, 1349-1367). Only **position** flows back: the `objectChange` tick writes the marker's XZ into `npcLivePositions`, `SceneEditorView` copies it to `npc.x/z`, and the E5 display model follows. **Rotate and Scale only turn or scale the marker**; nothing maps them to `rotationY` or `scale`, so the model never reacts. That is a gap I left in E5 (it moved position, and the inspector's Rotation / Scale fields, but not the gizmo).
+- **What the owner has now decided (answers Q-E5-3):** the marker is an **identification pin, not the transform handle**. It should not itself be transformed.
+- **Design (Recommended): attach the gizmo to the model, keep the marker as a pin.**
+  1. For an NPC that has a display model, `TransformControls` attaches to `npcDisplay.get(id).root`. For one without a model yet (no asset) it falls back to the marker, as today.
+  2. Rotate is restricted to **Y** (`rotationY` is the only authored rotation); Scale is restricted to **uniform** (`scale` is one number). Translate keeps XZ and may also write `y` (authored).
+  3. On every `objectChange`, write the result back to the entry (`x`, `z`, `y`, `rotationY` in degrees, `scale = root.scale / baseScale`). The display registry already applies entry to model on reconcile, so the write-back is idempotent; the marker follows position and is never rotated or scaled.
+  4. Ctrl+Z gesture revert must restore the model's transform, not the marker's: the gesture snapshot is keyed to the attached object today.
+  5. One attach function ("attach the gizmo for this selection") replacing the ~7 scattered `transformControls.attach(root)` sites, so there is a single place that decides marker vs model. (R5: enumerate every site.)
+- **Cost / risk:** touches the oversized `useSceneEditorViewport.ts` (2,091 lines, +17 from E5) in the gizmo-attach paths and the gesture-revert path. It is a good moment to put the attach decision in a small L1 module rather than add lines to the composable.
+- **Alternative (rejected):** keep the gizmo on the marker and map its rotation/scale into the entry, then reset the marker. Resetting the object the gizmo is mid-drag on breaks `TransformControls`' own drag state.
+- **Open question:** should the marker be hidden or shrunk when a model exists, now that it is purely an identification pin? **Recommended:** keep it, smaller, so an NPC with an unloaded or invisible model is still findable. Decide after seeing the model move with the gizmo.
+- **Acceptance:** select an NPC with a model, press R and drag: the model turns about Y and `rotationY` updates in the inspector; press S and drag: the model scales uniformly and `scale` updates; T moves the model and marker together; the marker itself never rotates or scales; Ctrl+Z reverts the model; an NPC without a model still moves by its marker.
 
 ## Target flow — the acceptance scenario the fix session unlocks  *(owner, 2026-09-30)*
 
