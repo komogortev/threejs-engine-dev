@@ -55,6 +55,10 @@ cd ../threejs-engine-dev && pnpm install && pnpm dev
 - [STATE.md](./STATE.md) — current state and known issues
 - [PLAN-critical-path.md](./PLAN-critical-path.md) — critical path
 
+## Credits
+
+The gallery room in the editor screenshot is ["Richard's Art Gallery - Audio Tour"](https://sketchfab.com/3d-models/richards-art-gallery-audio-tour-0e3e19faa6474fd5974e6a7ed1b221d8) by [shinymagic](https://sketchfab.com/shinymagic), used under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+
 ## License
 
 The source code is [MIT](./LICENSE) licensed. Third-party assets bundled under `public/` (for example the
