@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { EngineContext } from '@base/engine-core'
 import type { ThreeContext } from '@base/threejs-engine'
 import { MusicLayer } from '@base/audio'
-import { createEditorGltfLoader } from '@base/ui'
+import { createEditorGltfLoader, npcTransform, entryScale } from '@base/ui'
 import type { EditorNpcEntry, LoadedRoomPackage, SceneRow } from '@base/ui'
 import type { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { GameplaySceneModule } from './GameplaySceneModule'
@@ -167,6 +167,14 @@ export class RoomPlayerModule extends GameplaySceneModule {
       try {
         const gltf = await loader.loadAsync(blobUrl)
 
+        // Placement rule shared with the editor's display model (E5): rescue a grossly
+        // mis-scaled export to a sane height, then take y / rotationY / scale from the
+        // entry. Measured here, in bind pose, before any clip or pose touches the bones.
+        gltf.scene.updateMatrixWorld(true)
+        const height = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3()).y
+        const placement = npcTransform(height, npc)
+        if (placement.baseScale !== 1) gltf.scene.scale.multiplyScalar(placement.baseScale)
+
         // Recorded packs take the embedded/as-is clip path — same-skeleton clips
         // need no retarget, and the Mixamo sanitize/retarget pass would mangle them.
         const action = await this._startNpcClip(npc, pkg, loader, gltf.scene)
@@ -185,10 +193,10 @@ export class RoomPlayerModule extends GameplaySceneModule {
         }
 
         const root = new THREE.Group()
-        root.position.set(npc.x, npc.y ?? 0, npc.z)
-        // EditorNpcEntry.rotationY is authored in degrees
-        root.rotation.y = (npc.rotationY ?? 0) * Math.PI / 180
-        if (npc.scale !== undefined) root.scale.setScalar(npc.scale)
+        root.position.set(placement.position.x, placement.position.y, placement.position.z)
+        root.rotation.y = placement.rotationY
+        // Fit-rescue lives on the inner model; the root carries only the authored scale.
+        root.scale.setScalar(entryScale(npc.scale))
         root.add(gltf.scene)
         ctx.scene.add(root)
         this.placedMeshes.push(root)
