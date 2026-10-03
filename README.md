@@ -1,95 +1,60 @@
 # threejs-engine-dev
 
-Vue 3 + Vite **playground** for the [`@base/threejs-engine`](https://github.com/komogortev/vue-three-base-packages) stack: **scene view**, **terrain editor** (orbit camera, scatter zones, GLTF placement), and **walk mode** with third-person / first-person camera from `@base/camera-three` and locomotion from `@base/player-three`.
+A browser scene editor and walk-mode playground for Three.js. Author a room (terrain, placed GLB models,
+NPCs, zones, spawn point, ambient audio), then walk it in first or third person. Built with Vue 3 on the
+[`@base` packages](https://github.com/komogortev/vue-three-base-packages).
 
-**Live site (GitHub Pages):** [komogortev.github.io/threejs-engine-dev](https://komogortev.github.io/threejs-engine-dev/)
+**[Live demo](https://komogortev.github.io/threejs-engine-dev/)** — runs in the browser; the editor works best on desktop.
 
----
+![The scene editor with a gallery room loaded: scene list and inspector panels, orbit camera](docs/media/editor-gallery-scene.webp)
 
-## Features
+> **Status:** active development. This is the workbench for the `@base` platform and the first release
+> target, a manual scene and narrative authoring tool. Known gaps: placed objects are not solid yet, zones
+> are exported but not read at runtime, and there are no path or animation triggers yet.
 
-- **Menu** — route hub for Game, Scene, Editor, Settings  
-- **Scene** — third-person / first-person camera presets (`@base/camera-three`)  
-- **Editor** — `EditorSceneModule`: OrbitControls, TransformControls, terrain authoring, Author/Bird-eye orbit + WASD on session avatar, walk simulation  
-- **Descriptors** — `SceneDescriptor` + `SceneBuilder` for terrain, scatter, placed objects, optional character  
+## What it does
 
----
+- **Scenes** — list, open, import (ZIP) and delete scenes; they are stored in the browser (IndexedDB).
+- **Editor** — orbit and bird's-eye camera, transform gizmos, terrain authoring, scatter zones, GLB placement,
+  and a walk simulation on a session avatar.
+- **NPCs** — shown as real models you can move, rotate and scale, with poses and animation clips from any
+  animation kit.
+- **Room player** — plays a built room with third- and first-person cameras from `@base/camera-three` and
+  locomotion from `@base/player-three`; NPCs use the same placement rule as the editor.
+- **Descriptors** — a scene is a `SceneDescriptor` that `SceneBuilder` turns into terrain, scatter, placed
+  objects and an optional character.
+- **Asset tooling** — headless Mixamo FBX to GLB conversion (no Blender needed).
 
-## Local development
+## Run it locally
 
-### Layout (required for `pnpm` `link:` dependencies)
-
-This repo expects the shared workspace **next to** this folder:
-
-```text
-your-workspace/
-  SHARED/                 # clone: github.com/komogortev/vue-three-base-packages
-  threejs-engine-dev/     # this repository
-```
-
-Dependencies in `package.json` use `link:../SHARED/packages/...`. Adjust paths if your layout differs.
-
-### Commands
+The app consumes the shared packages through `link:` dependencies, so the two repositories must sit side
+by side. Needs Node 20 or newer and pnpm 9 or newer.
 
 ```bash
-cd SHARED && pnpm install && pnpm build   # build @base/* dist outputs first
-cd ../threejs-engine-dev
-pnpm install
-pnpm dev
+mkdir workspace && cd workspace
+git clone https://github.com/komogortev/vue-three-base-packages SHARED
+git clone https://github.com/komogortev/threejs-engine-dev
+cd SHARED && pnpm install && pnpm build    # builds the @base/* packages
+cd ../threejs-engine-dev && pnpm install && pnpm dev
 ```
 
-- **Typecheck:** `pnpm run typecheck`  
-- **Production build (root site):** `pnpm run build`  
-- **Production build (GitHub project Pages):** set `VITE_BASE_PATH=/threejs-engine-dev/` then `pnpm run build` (CI does this automatically)
-
----
-
-## GitHub Pages
-
-GitHub Pages **does not run Vite**. This project deploys **static `dist/`** via **GitHub Actions**.
-
-### Repository settings
-
-1. **Settings → Actions → General**  
-   - **Actions permissions:** allow actions (e.g. “Allow all actions and reusable workflows” for public repos).  
-   - Without this, workflows never run—**no GitHub-hosted runner is used**.
-
-2. **Self-hosted runners (optional)**  
-   - **Settings → Actions → Runners** lists **self-hosted** machines only.  
-   - This project uses **`runs-on: ubuntu-latest`**, which is **GitHub-hosted**—you do **not** need to add a runner there. An empty runner list is normal.
-
-3. **Settings → Pages → Build and deployment**  
-   - **Source:** **GitHub Actions** (not “Deploy from a branch” with raw repo files).
-
-4. First deployment: **Settings → Environments → `github-pages`** — approve the environment if GitHub prompts for it.
-
-5. Workflow: [`.github/workflows/deploy-github-pages.yml`](.github/workflows/deploy-github-pages.yml)  
-   - Sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to align with GitHub’s [Node 20 deprecation on Actions](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/); build uses Node **22** via `setup-node`.  
-   - Checks out **this repo** and **[vue-three-base-packages](https://github.com/komogortev/vue-three-base-packages)** as `SHARED`  
-   - Builds packages, then builds the app with `VITE_BASE_PATH=/threejs-engine-dev/`  
-   - Uploads `dist/` with `actions/upload-pages-artifact@v3` (keeps dotfiles such as `.nojekyll`) and deploys with `actions/deploy-pages`
-
-You can re-run deployment manually: **Actions → Deploy GitHub Pages → Run workflow**.
-
-### If you still see a blank page
-
-- Hard refresh or **Application → Service Workers → Unregister** (an old SW from a broken `/` base can cache bad responses).  
-- Confirm the latest **Actions** run succeeded and **Pages** shows the deployment from that run.  
-- Open the site **with** trailing slash or use the exact Pages URL: `/threejs-engine-dev/`.
-
-### SPA deep links
-
-`404.html` is a copy of `index.html` so refreshes on client routes (e.g. `/threejs-engine-dev/editor`) work on GitHub Pages. `.nojekyll` is included for static hosting edge cases.
-
----
+- **Typecheck:** `pnpm run typecheck`
+- **Production build:** `pnpm run build`
+- **Production build for GitHub Pages:** set `VITE_BASE_PATH=/threejs-engine-dev/`, then `pnpm run build`
+  (CI does this). Setup and troubleshooting: [docs/GITHUB-PAGES.md](./docs/GITHUB-PAGES.md).
 
 ## Tech stack
 
-- Vue 3, Vue Router, Pinia, Vite 6, Tailwind, PWA (Vite PWA plugin)  
-- three.js, `@base/engine-core`, `@base/threejs-engine`, `@base/input`, `@base/player-three`, `@base/camera-three`, `@base/audio`  
+- Vue 3, Vue Router, Pinia, Vite 6, Tailwind, PWA (Vite PWA plugin)
+- three.js, `@base/engine-core`, `@base/threejs-engine`, `@base/input`, `@base/player-three`,
+  `@base/camera-three`, `@base/audio`
 
----
+## Docs
+
+- [PROJECT.md](./PROJECT.md) — vision and architecture
+- [STATE.md](./STATE.md) — current state and known issues
+- [PLAN-critical-path.md](./PLAN-critical-path.md) — critical path
 
 ## License
 
-Private / as per repository owner (default: all rights reserved unless a `LICENSE` file is added).
+No licence has been chosen yet, so all rights are reserved.
