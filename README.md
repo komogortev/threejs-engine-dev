@@ -57,4 +57,5 @@ cd ../threejs-engine-dev && pnpm install && pnpm dev
 
 ## License
 
-No licence has been chosen yet, so all rights are reserved.
+The source code is [MIT](./LICENSE) licensed. Third-party assets bundled under `public/` (for example the
+Mixamo characters and animations and the Draco decoder) keep their own terms and are not covered by it.
