@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ThreeModule } from '@base/threejs-engine'
 import { InputModule, mergeBindings } from '@base/input'
 import { loadRoomPackage, loadRoomFromDb, assetDb, type LoadedRoomPackage } from '@base/ui'
@@ -9,6 +9,7 @@ import { useShellContext } from '@/composables/useShellContext'
 import { RoomPlayerModule } from '@/modules/RoomPlayerModule'
 
 const router   = useRouter()
+const route    = useRoute()
 const context  = useShellContext()
 const container = ref<HTMLElement>()
 
@@ -34,22 +35,29 @@ const isDragOver  = ref(false)
 
 let currentPkg: LoadedRoomPackage | null = null
 let isSwitching = false
+/** True from a successful `engine.mount` until `engine.unmount`, so a failed or interrupted boot still tears down. */
+let engineMounted = false
+let disposed = false
 
-async function bootRoom(file: File): Promise<void> {
+/** A ZIP file dropped/chosen on this page, or a saved-scene id from the Scenes screen. */
+async function bootRoom(source: File | string): Promise<void> {
   if (viewState.value === 'loading' || viewState.value === 'playing') return
   viewState.value = 'loading'
   errorMsg.value  = ''
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const pkg = loadRoomPackage(bytes)
+    const pkg = typeof source === 'string'
+      ? await loadRoomFromDb(source)
+      : loadRoomPackage(new Uint8Array(await source.arrayBuffer()))
     currentPkg  = pkg
     sceneLabel.value = pkg.manifest.sceneLabel
 
     if (!container.value) throw new Error('Canvas container not ready')
     await engine.mount(container.value, context)
+    engineMounted = true
     await engine.mountChild('input', inputModule)
     await engine.mountChild('scene', sceneModule)
     await sceneModule.loadRoom(pkg)
+    if (disposed) return // left the page mid-boot; onUnmounted already tore down
 
     viewState.value = 'playing'
     window.addEventListener('keydown', onKeyDown)
@@ -58,13 +66,24 @@ async function bootRoom(file: File): Promise<void> {
     viewState.value = 'idle'
     errorMsg.value  = e instanceof Error ? e.message : String(e)
     console.error('[RoomPlayerView] Boot failed:', e)
+    // A throw after mount (e.g. loadRoom) must not leave a live engine behind:
+    // a retry would mount a second time on top of it.
+    if (engineMounted) {
+      engineMounted = false
+      await engine.unmount().catch(() => {})
+    }
+    currentPkg?.revoke()
+    currentPkg = null
   }
 }
 
 async function exitRoom(): Promise<void> {
   window.removeEventListener('keydown', onKeyDown)
-  if (viewState.value === 'playing') {
+  if (engineMounted) {
+    engineMounted = false
     await engine.unmount()
+  }
+  if (viewState.value === 'playing') {
     currentPkg?.revoke()
     currentPkg = null
   }
@@ -148,9 +167,16 @@ function onFileInput(e: Event): void {
   if (file) bootRoom(file)
 }
 
+onMounted(() => {
+  // `/room?scene=<id>` — the Scenes screen's Play.
+  const wanted = typeof route.query.scene === 'string' ? route.query.scene : null
+  if (wanted) void bootRoom(wanted)
+})
+
 onUnmounted(async () => {
+  disposed = true
   window.removeEventListener('keydown', onKeyDown)
-  if (viewState.value === 'playing') await engine.unmount()
+  if (engineMounted) { engineMounted = false; await engine.unmount() }
   currentPkg?.revoke()
   currentPkg = null
 })
