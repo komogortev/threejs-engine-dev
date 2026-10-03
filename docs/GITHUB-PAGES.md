@@ -1,0 +1,39 @@
+# GitHub Pages deployment
+
+How this project is deployed to GitHub Pages. Moved out of the README.
+
+
+GitHub Pages **does not run Vite**. This project deploys **static `dist/`** via **GitHub Actions**.
+
+## Repository settings
+
+1. **Settings → Actions → General**  
+   - **Actions permissions:** allow actions (e.g. “Allow all actions and reusable workflows” for public repos).  
+   - Without this, workflows never run—**no GitHub-hosted runner is used**.
+
+2. **Self-hosted runners (optional)**  
+   - **Settings → Actions → Runners** lists **self-hosted** machines only.  
+   - This project uses **`runs-on: ubuntu-latest`**, which is **GitHub-hosted**—you do **not** need to add a runner there. An empty runner list is normal.
+
+3. **Settings → Pages → Build and deployment**  
+   - **Source:** **GitHub Actions** (not “Deploy from a branch” with raw repo files).
+
+4. First deployment: **Settings → Environments → `github-pages`** — approve the environment if GitHub prompts for it.
+
+5. Workflow: [`.github/workflows/deploy-github-pages.yml`](../.github/workflows/deploy-github-pages.yml)  
+   - Sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to align with GitHub’s [Node 20 deprecation on Actions](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/); build uses Node **22** via `setup-node`.  
+   - Checks out **this repo** and **[vue-three-base-packages](https://github.com/komogortev/vue-three-base-packages)** as `SHARED`  
+   - Builds packages, then builds the app with `VITE_BASE_PATH=/threejs-engine-dev/`  
+   - Uploads `dist/` with `actions/upload-pages-artifact@v3` (keeps dotfiles such as `.nojekyll`) and deploys with `actions/deploy-pages`
+
+You can re-run deployment manually: **Actions → Deploy GitHub Pages → Run workflow**.
+
+## If you still see a blank page
+
+- Hard refresh or **Application → Service Workers → Unregister** (an old SW from a broken `/` base can cache bad responses).  
+- Confirm the latest **Actions** run succeeded and **Pages** shows the deployment from that run.  
+- Open the site **with** trailing slash or use the exact Pages URL: `/threejs-engine-dev/`.
+
+## SPA deep links
+
+`404.html` is a copy of `index.html` so refreshes on client routes (e.g. `/threejs-engine-dev/editor`) work on GitHub Pages. `.nojekyll` is included for static hosting edge cases.
