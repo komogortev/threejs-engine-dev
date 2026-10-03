@@ -63,7 +63,7 @@ base64: `rapier.es.js` is **2.06 MB** raw on disk (the `.wasm` alone is 1.44 MB)
 | Point projection / shape overlap | `spherePenetration` | Not needed once the KCC resolves walls | Not needed |
 | **Collision groups / query filters** (16-bit membership + filter, exclude-collider, predicate) | **not wrapped** | Keep the player capsule out of ground rays; mark props non-blocking (glass, decals, foliage) | **Wrap (P0-1)**, small |
 | **Debug render** (`world.debugRender()` → line buffers) | **not wrapped** | `?physdebug` wireframe so the owner sees what's solid | **Wrap (P0-1)**, cheapest proof there is |
-| Primitive shapes (cuboid, capsule, cylinder, convex hull, compound) | capsule inside `CharacterMover` only | Cheaper than trimesh for box-like props; needs an authoring choice | Later |
+| Primitive shapes (cuboid, capsule, cylinder, convex hull, compound) | capsule inside `CharacterMover` only | Cheaper than trimesh for box-like props; needs an authoring choice | Parked. Re-entry: task 1c measures a `loadRoom()` stall on the heaviest prop (see NOTE-P0-1-AABB-INTERIM) |
 | Kinematic rigid bodies (moved colliders) | not wrapped | Doors, lifts, drawers (P1-3) | Later. In a never-stepped world, move with `setTranslation` + `updateSceneQueries()`, not `setNextKinematic*` *(inference)* |
 | Sensors + intersection/collision/contact-force events | not wrapped | Arbitrary-shape zones | **Skip.** Events come out of `world.step()`, and this world is never stepped. Circular zones are a distance check the runtime already does |
 | Dynamic bodies, gravity, CCD, joints (revolute/prismatic/spherical/rope/spring), multibody | not wrapped | Pushable props, physical doors | **Skip.** Conflicts with the HYBRID rule (carry system owns motion); a room-specific exception would be an owner call |
@@ -122,7 +122,7 @@ walkthrough *(inference, to confirm in the playtest)*.
 | 1c | **Per-prop try/catch** around `addStaticMesh` | `RoomPlayerModule.ts` | `extractTrimesh` throws on a root with no mesh geometry (lights/empties only); one such prop would abort the whole load |
 | 1d | **Props only, never NPC roots** | `RoomPlayerModule.ts` | `placedMeshes` holds both (`RoomPlayerModule.ts:194`). `extractTrimesh` already skips `SkinnedMesh`, but NPC accessories may not be skinned |
 | 1e | `RoomColliderSampler` (§2.2) | `src/utils/` (new) | |
-| 1f | XZ correction in `onAfterGameplayTick`. Capsule profile `radius 0.35`, `halfHeight 0.5` (matches the default capsule: `CapsuleGeometry(0.35, 1.0)`, `PLAYER_CAPSULE_HALF_HEIGHT = 0.85`) | `RoomPlayerModule.ts` | Track last position; `move(last, delta with y = 0)` |
+| 1f | XZ correction in `onAfterGameplayTick`. Name the KCC autostep height explicitly (a tunable for the playtest). Capsule profile `radius 0.35`, `halfHeight 0.5` (matches the default capsule: `CapsuleGeometry(0.35, 1.0)`, `PLAYER_CAPSULE_HALF_HEIGHT = 0.85`) | `RoomPlayerModule.ts` | Track last position; `move(last, delta with y = 0)` |
 | 1g | `?physdebug`: wrap `debugRender()` → `LineSegments` | `@base/physics` + `RoomPlayerModule.ts` | Additive SHARED export |
 | 1h | Collision-group wrap: `addStaticMesh(..., { groups })` + ray filter | `@base/physics` | Additive; existing calls unchanged |
 
@@ -145,6 +145,9 @@ walkthrough *(inference, to confirm in the playtest)*.
   capture the player**, the glass wall blocks.
 - Negative controls: a prop with no geometry logs a warning and the room still loads; a switch A → B → A leaves exactly
   one character-controller capsule (no leak across `unloadRoom`).
+- Negative control (added 2026-10-03, [`NOTE-P0-1-AABB-INTERIM`](NOTE-P0-1-AABB-INTERIM-2026-10-03.md) §4): spawn with the
+  capsule overlapping a placed prop's trimesh → the player resolves out on the near side, never through the prop.
+  Whether the KCC's depenetration does this by default is unverified.
 - Owner playtest: walking, corners, eye height.
 
 ---
