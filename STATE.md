@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase 5 → Room P0s; this project is **Release 1**, the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-07 — planning, no code: **Track P** (in-editor Claude prompt panel; owner-validated proposals) queued ahead of E7 (`../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`); content-delivery slices CD-0..CD-4 (`docs/PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md`). R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
-Working: the editor composes scenes (placed GLBs, NPC models you move / rotate / scale, pose + clips from any kit, zones, spawn, ambient audio); `/scenes` lists, opens, imports, deletes; room player plays NPC clips; FPV menu; headless FBX→GLB.
+Phase: Phase 5 → Room P0s; this project is **Release 1**, the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-07 — **Track P** queued ahead of E7 (`../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`) and **PP-1 shipped** in SHARED #63 (multi-step undo/redo for every scene edit) + #64 (placed-object registry); content-delivery slices CD-0..CD-4 queued (`docs/PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md`). R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
+Working: the editor composes scenes (placed GLBs, NPC models you move / rotate / scale, pose + clips from any kit, zones, spawn, ambient audio) with Ctrl+Z / Ctrl+Shift+Z across all of it; `/scenes` lists, opens, imports, deletes; room player plays NPC clips; FPV menu; headless FBX→GLB.
 Broken: **nothing placed is solid** (P0-1) · zones never read by `loadRoom()` (P0-2) · Sandbox skips Draco/Meshopt GLBs (plain `GLTFLoader`, CD-0) · each placement parsed separately, no shader warm-up (CD-1/2) · E11 first-click not reproduced · no paths / behaviors / narrative (E7/E8) · FPV head clipping.
 Blocker: terrain surface-normal API not exposed (uphill lean).
-Next: merge SHARED #57 (open) → **PP-1…PP-6** → E7-a/b → E8 (+ clip compatibility) → P0-2 (+ CD-M/1/2) → P0-1 Stage A (+ CD-4); CD-0 any time. Owed: owner visual pass, E11 repro, 2-NPC-one-asset check. D4 open.
+Next: **PP-2…PP-6** (PP-1 ✅) → E7-a/b → E8 (+ clip compatibility) → P0-2 (+ CD-M/1/2) → P0-1 Stage A (+ CD-4); CD-0 any time. Owed: owner visual pass, E11 repro, 2-NPC-one-asset check. D4 open.
 History: older snapshots in `## Snapshot archive` at the end of this file; full history in git.
 
 ---
