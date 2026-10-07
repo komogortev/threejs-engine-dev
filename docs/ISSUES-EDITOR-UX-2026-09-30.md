@@ -20,7 +20,7 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
 | E9 | Left panel: inconsistent add flows, misnamed "Player", list placement, no collapse | information architecture | **built 2026-10-03** (SHARED feat/ui-hierarchy-sections, awaiting merge); owner visual pass pending |
 | E10 | No import of a scene (ZIP) into the editor — only play via `/room` | **missing capability** | **closed 2026-10-03** — import into the editor library (SHARED #53) |
 | E11 | Right-side editor buttons click unreliably (T/R/S, Transform to Anim tabs) | **bug (UI reliability)** | **partly fixed 2026-10-03** (ghost dialog, bigger targets); the first-click symptom is not reproduced, owner retest pending |
-| E12 | T / R / S transform the NPC **marker**, not the model (rotate and scale have no effect on the model) | **bug (E5 follow-up)** | open, design below; **next after E9** |
+| E12 | T / R / S transform the NPC **marker**, not the model (rotate and scale have no effect on the model) | **bug (E5 follow-up)** | **built 2026-10-03** (SHARED feat/ui-npc-gizmo-on-model, awaiting review/merge); owner retest pending |
 
 ## E1 — "Load Room" → "Import Scene"
 
@@ -141,6 +141,8 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
   - **Q-E8-2:** time model — only per-step `delaySeconds` (what exists), or a true timeline with parallel tracks? Recommended: start with delay steps (already implemented); a timeline is a later UI over the same data.
   - **Q-E8-3:** default clip (`★`) becomes the `scene_start → play_clip(loop)` binding, or stays a separate field? Recommended: fold it in, so there is one mechanism (migrate existing `defaultClip` on load).
 
+- **Owner question 2026-10-03 (animation packs):** *"do we want to assign multiple animations or do we need a separate system managing animations that would qualify animation compatibility and apply it on trigger to the model?"* **Recommended: the separate system, built as three parts.** (1) **Library**: the kits in the Asset Library (the Anim tab now lists every kit's clips). (2) **Compatibility**: a verdict per (character, kit) from bone-name overlap (reuse `resolveClipBones`), computed not stored, shown as matched/total in the pickers; the Canonical Humanoid Rig track later adds retargeting. (3) **Application**: `play_clip { kit, clip }` behavior steps fired by triggers (this E8 design). Do **not** add `animationPacks: string[]` to the NPC: it is a second binding system E8 would replace. Keep `animationPackAssetId` as the NPC's default kit meanwhile. Consequence for E7/E8: the scene package export collects only each NPC's bound pack today, so it must collect every kit a behavior references. **Open for the owner:** compatibility threshold (recommended: show matched/total, call a kit compatible at 90% or more).
+
 ## E9 — Left panel: one consistent model  *(absorbs E4)*
 
 - **Saw (owner):**
@@ -215,6 +217,9 @@ Reproduction caveat: the dev browser profile has an empty asset library, so anyt
 - **Alternative (rejected):** keep the gizmo on the marker and map its rotation/scale into the entry, then reset the marker. Resetting the object the gizmo is mid-drag on breaks `TransformControls`' own drag state.
 - **Open question:** should the marker be hidden or shrunk when a model exists, now that it is purely an identification pin? **Recommended:** keep it, smaller, so an NPC with an unloaded or invisible model is still findable. Decide after seeing the model move with the gizmo.
 - **Acceptance:** select an NPC with a model, press R and drag: the model turns about Y and `rotationY` updates in the inspector; press S and drag: the model scales uniformly and `scale` updates; T moves the model and marker together; the marker itself never rotates or scales; Ctrl+Z reverts the model; an NPC without a model still moves by its marker.
+- **Built 2026-10-03 (as designed, Recommended option):** the gizmo attaches to the display model when one exists (marker as fallback), through one `attachGizmo` that every attach site now uses, so axis limits cannot leak onto a bone / zone / placed object. On the model: translate XZ only, rotate Y only, scale uniform. `rotationY` is derived from the quaternion (three's `Euler.y` is wrong past 90 degrees: measured, a 150 deg yaw decomposes to (180, 30, 180)); `scale = model.scale / baseScale`, clamped at 0.01. The marker follows XZ and is never rotated or scaled. The registry's transform write became `rotation.set(0, y, 0)`, because a gizmo-written quaternion leaves Euler x = z = 180 and setting only `.y` faced the model the wrong way.
+- **Also fixed on the way:** the old "force uniform" code read `scale.x`, so dragging the green (Y) or blue (Z) scale handle did nothing. It now follows whichever axis moved furthest (`uniformScaleFrom`).
+- **Verified in the editor:** gizmo parent is `npc-display`; Rotate shows only the Y ring; a real mouse drag of the ring took `rotationY` 180 -> 302.24 with the model facing 302.2 and Euler x/z = 0; a real drag of the Y scale handle took scale 1 -> 1.938 with the model uniform; synthetic gizmo events: yaw 150 / 260 exact, non-uniform scale forced uniform, negative scale clamps to 0.01, translate moves model and marker together with the marker's rotation/scale untouched, Ctrl+Z reverts the model, inspector and marker.
 
 ## Target flow — the acceptance scenario the fix session unlocks  *(owner, 2026-09-30)*
 

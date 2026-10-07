@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase 5 → Room P0s; this project is **Release 1** — the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-03 — editor fix session: **E1/E2/E10 shipped** (#33 Scenes screen; scene import into the editor) and **E5 shipped** (#35 + SHARED #53/#54: persistent NPC models, one placement rule shared with the room player). R1 gap: 3 of 13 built, 3 partial, 7 not (`docs/ASSESSMENT-R1-RELEASE-GAP-2026-09-29.md`). | Stack: Vue 3 + @base Three.js harness
-Working: the editor composes scenes (placed GLBs, NPCs **shown as models** with pose + anim-pack clips, zones, spawn, ambient audio); `/scenes` lists, opens (`?scene=` → editor / room / sandbox), imports (ZIP → Dexie) and deletes; Room Package export/import; room player plays NPC clips; FPV menu; headless Mixamo FBX→GLB (`scripts/fbx-to-glb.mjs`).
-Broken: **nothing placed is solid** (P0-1) · zones exported but `loadRoom()` never reads them (P0-2) · **right-side editor buttons (T/R/S, Transform→Anim tabs) click unreliably** (E11, uninvestigated) · no path/animation triggers or narrative (E7/E8; reaction engine only in three-dreams) · FPV head clipping on Tab · swimming clips unconfirmed · camera-relative movement.
+Phase: Phase 5 → Room P0s; this project is **Release 1** — the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-03 — editor fix session: Scenes screen + scene import (#33), persistent NPC models + one placement rule (#35, SHARED #53/#54), left panel as 3 sections (SHARED #56), E6 ghost dialog fixed (#55), Anim tab lists every kit + New Kit binds the NPC (#58/#59). **E12 (gizmo drives the model) is SHARED #57, open, review re-run pending.** R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
+Working: the editor composes scenes (placed GLBs, NPCs shown as models you can move / rotate / scale, pose + anim clips from any kit, zones, spawn, ambient audio); `/scenes` lists, opens, imports (ZIP → Dexie) and deletes; room player plays NPC clips with the same placement rule; FPV menu; headless Mixamo FBX→GLB.
+Broken: **nothing placed is solid** (P0-1) · zones exported but `loadRoom()` never reads them (P0-2) · **E11: "first click lost" on T/R/S and tabs not reproduced** (ghost dialog + small targets fixed; needs owner's window size + what a failed click does) · no path / animation triggers or narrative (E7/E8) · FPV head clipping on Tab · swimming clips unconfirmed · camera-relative movement.
 Blocker: terrain surface-normal API not exposed (uphill lean).
-Next: **E11 click reliability + E9 left panel (with E3/E4)** — `docs/ISSUES-EDITOR-UX-2026-09-30.md`; then E7-a/b paths + preview; then **P0-2 zones → P0-1 Stage A** (`docs/PLAN-ROOM-P0-COLLISION-ZONES-2026-09-11.md`). Owed: owner's visual pass (editor + Scenes), a 30 s real-rAF glance at S5 playback, a browser check of 2 NPCs on one asset. D4 (what "release" ships) open.
+Next: merge SHARED #57 once CI is green; then **E7-a/b** (scene-level named paths: storage, preview, speed) and the **E8 Behaviors** design, which must also settle clip compatibility (owner asked 2026-10-03: separate library / compatibility / apply-on-trigger system, not multi-pack per NPC — recommended); then **P0-2 zones → P0-1 Stage A**. Owed: owner's visual pass, E11 repro detail, a 2-NPC-one-asset browser check. D4 (what "release" ships) open.
 History: older snapshots in `## Snapshot archive` at the end of this file; full history in git.
 
 ---
@@ -77,6 +77,10 @@ Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. C
 
 <!-- Append-only. One line per decision, newest first. -->
 
+- **2026-10-03** — **The transform gizmo drives the NPC model; the marker is an identification pin** (owner, E12; SHARED #57). Why: the gizmo was attached to the marker, so Rotate/Scale only turned the pin and nothing reached the model; the owner stated the marker's role and expected the model to transform. Handles are limited to what an entry can store (model: ground-plane move / Y rotate / uniform scale; marker: ground-plane move only). `rotationY` is read from the quaternion because three's `Euler.y` is wrong past 90 degrees (a 150 deg yaw decomposes to (180, 30, 180)). Verified with real mouse drags (rotate 180 → 302.24, Y scale handle 1 → 1.938).
+
+- **2026-10-03** — **The Anim tab lists clips from every animation kit, and "New Kit" binds the new kit to an NPC that has no pack** (owner; SHARED #58/#59). Why: a saved clip became a separate, unbound kit and the picker only showed the NPC's bound pack, so earlier recordings looked lost (not a cache issue). A second cause: packs imported without a sidecar had no `clipNames`; the importer now reads them from the GLB and the store backfills old rows. An NPC that already has a pack is never re-pointed. **Open (recommended, not yet decided):** assigning several packs per NPC vs a separate system (library, compatibility verdict from bone-name overlap, application via `play_clip` behaviors) — see issues doc E8.
+
 - **2026-10-03** — **NPC placement is one shared rule, and it does not ground** (`pose/npcPlacement.ts`, SHARED #54; room player #35). Why: the editor fit-rescued and grounded a model while the player did neither, so a centimetre export was normal-sized in one and ~100 m tall in the other. Fit-rescue (outliers outside 0.3–4 m) and `y` / `rotationY` / `scale` from the entry now apply in both; grounding was dropped because `y` is an authored field and a bbox snap would silently override it. Verified with a deliberately cm-scaled character (giant boot without the rescue). Plan: `docs/PLAN-E5-NPC-DISPLAY-MESH-2026-10-03.md`.
 
 - **2026-10-03** — **One persistent display model per NPC; the pose editor borrows it** (E5, SHARED #54). Why: the pose editor's mesh was the only NPC model, one at a time with its own lifetime, so "set a mesh, see nothing" was structural, not a missed call. Display is a declarative reconcile (asset set, add/remove, scene load and the library loading late are one path); the rest pose is restored from a load-time snapshot because `Skeleton.pose()` applies an Armature parent's transform twice. A review found that and ten more; all verified against the files before acting. `useSceneEditorViewport.ts` ended net +17 lines (2,091), so the pose-editor cluster is the next L1 extraction.
@@ -135,6 +139,15 @@ Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. C
 ## Snapshot archive
 
 _Superseded SNAPSHOT bodies, verbatim, newest first. Not orientation material._
+
+### Pre-2026-10-03 close (editor fix session, mid-session)
+
+Phase: Phase 5 → Room P0s; this project is **Release 1** — the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-03 — editor fix session: **E1/E2/E10 shipped** (#33 Scenes screen; scene import into the editor) and **E5 shipped** (#35 + SHARED #53/#54: persistent NPC models, one placement rule shared with the room player). R1 gap: 3 of 13 built, 3 partial, 7 not (`docs/ASSESSMENT-R1-RELEASE-GAP-2026-09-29.md`). | Stack: Vue 3 + @base Three.js harness
+Working: the editor composes scenes (placed GLBs, NPCs **shown as models** with pose + anim-pack clips, zones, spawn, ambient audio); `/scenes` lists, opens (`?scene=` → editor / room / sandbox), imports (ZIP → Dexie) and deletes; Room Package export/import; room player plays NPC clips; FPV menu; headless Mixamo FBX→GLB (`scripts/fbx-to-glb.mjs`).
+Broken: **nothing placed is solid** (P0-1) · zones exported but `loadRoom()` never reads them (P0-2) · **right-side editor buttons (T/R/S, Transform→Anim tabs) click unreliably** (E11, uninvestigated) · no path/animation triggers or narrative (E7/E8; reaction engine only in three-dreams) · FPV head clipping on Tab · swimming clips unconfirmed · camera-relative movement.
+Blocker: terrain surface-normal API not exposed (uphill lean).
+Next: **E11 click reliability + E9 left panel (with E3/E4)** — `docs/ISSUES-EDITOR-UX-2026-09-30.md`; then E7-a/b paths + preview; then **P0-2 zones → P0-1 Stage A** (`docs/PLAN-ROOM-P0-COLLISION-ZONES-2026-09-11.md`). Owed: owner's visual pass (editor + Scenes), a 30 s real-rAF glance at S5 playback, a browser check of 2 NPCs on one asset. D4 (what "release" ships) open.
+History: older snapshots in `## Snapshot archive` at the end of this file; full history in git.
 
 ### Pre-2026-10-03 (editor fix session, E1-E10)
 
