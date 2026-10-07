@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase 5 → Room P0s; this project is **Release 1** — the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-03 — editor fix session: Scenes screen + scene import (#33), persistent NPC models + one placement rule (#35, SHARED #53/#54), left panel as 3 sections (SHARED #56), E6 ghost dialog fixed (#55), Anim tab lists every kit + New Kit binds the NPC (#58/#59). **E12 (gizmo drives the model) is SHARED #57, open, review re-run pending.** R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
-Working: the editor composes scenes (placed GLBs, NPCs shown as models you can move / rotate / scale, pose + anim clips from any kit, zones, spawn, ambient audio); `/scenes` lists, opens, imports (ZIP → Dexie) and deletes; room player plays NPC clips with the same placement rule; FPV menu; headless Mixamo FBX→GLB.
-Broken: **nothing placed is solid** (P0-1) · zones exported but `loadRoom()` never reads them (P0-2) · **E11: "first click lost" on T/R/S and tabs not reproduced** (ghost dialog + small targets fixed; needs owner's window size + what a failed click does) · no path / animation triggers or narrative (E7/E8) · FPV head clipping on Tab · swimming clips unconfirmed · camera-relative movement.
+Phase: Phase 5 → Room P0s; this project is **Release 1**, the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-07 — planning, no code: **Track P** (in-editor Claude prompt panel; owner-validated proposals) queued ahead of E7 (`../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`); content-delivery slices CD-0..CD-4 (`docs/PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md`). R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
+Working: the editor composes scenes (placed GLBs, NPC models you move / rotate / scale, pose + clips from any kit, zones, spawn, ambient audio); `/scenes` lists, opens, imports, deletes; room player plays NPC clips; FPV menu; headless FBX→GLB.
+Broken: **nothing placed is solid** (P0-1) · zones never read by `loadRoom()` (P0-2) · Sandbox skips Draco/Meshopt GLBs (plain `GLTFLoader`, CD-0) · each placement parsed separately, no shader warm-up (CD-1/2) · E11 first-click not reproduced · no paths / behaviors / narrative (E7/E8) · FPV head clipping.
 Blocker: terrain surface-normal API not exposed (uphill lean).
-Next: merge SHARED #57 once CI is green; then **E7-a/b** (scene-level named paths: storage, preview, speed) and the **E8 Behaviors** design, which must also settle clip compatibility (owner asked 2026-10-03: separate library / compatibility / apply-on-trigger system, not multi-pack per NPC — recommended); then **P0-2 zones → P0-1 Stage A**. Owed: owner's visual pass, E11 repro detail, a 2-NPC-one-asset browser check. D4 (what "release" ships) open.
+Next: merge SHARED #57 (open) → **PP-1…PP-6** → E7-a/b → E8 (+ clip compatibility) → P0-2 (+ CD-M/1/2) → P0-1 Stage A (+ CD-4); CD-0 any time. Owed: owner visual pass, E11 repro, 2-NPC-one-asset check. D4 open.
 History: older snapshots in `## Snapshot archive` at the end of this file; full history in git.
 
 ---
@@ -77,6 +77,10 @@ Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. C
 
 <!-- Append-only. One line per decision, newest first. -->
 
+- **2026-10-07** — **Track P: Claude edits the scene from an in-editor chat panel, ahead of E7** (owner). Why: manual scene building is slow. Claude proposes through scene commands and a scene description; the gate vetoes, Claude checks a screenshot, the owner accepts or rejects each item and accepted changes are one undo step. PP-1 (one routing point for every edit) absorbs the deferred undo stack H-1. Plan: `../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`.
+
+- **2026-10-07** — **Content delivery gets a build stage between the authored scene and the runtime** (owner, after a read of `webdevcody/survive-the-night-fps`). Why: the runtime receives the editor's one-object-per-placement graph unchanged, so cost grows with placements: one parse each, no shader warm-up, no instancing. CD-M measures first; batching (CD-3) only if draw-call bound. Plan: `docs/PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md`.
+
 - **2026-10-03** — **The transform gizmo drives the NPC model; the marker is an identification pin** (owner, E12; SHARED #57). Why: the gizmo was attached to the marker, so Rotate/Scale only turned the pin and nothing reached the model; the owner stated the marker's role and expected the model to transform. Handles are limited to what an entry can store (model: ground-plane move / Y rotate / uniform scale; marker: ground-plane move only). `rotationY` is read from the quaternion because three's `Euler.y` is wrong past 90 degrees (a 150 deg yaw decomposes to (180, 30, 180)). Verified with real mouse drags (rotate 180 → 302.24, Y scale handle 1 → 1.938).
 
 - **2026-10-03** — **The Anim tab lists clips from every animation kit, and "New Kit" binds the new kit to an NPC that has no pack** (owner; SHARED #58/#59). Why: a saved clip became a separate, unbound kit and the picker only showed the NPC's bound pack, so earlier recordings looked lost (not a cache issue). A second cause: packs imported without a sidecar had no `clipNames`; the importer now reads them from the GLB and the store backfills old rows. An NPC that already has a pack is never re-pointed. **Open (recommended, not yet decided):** assigning several packs per NPC vs a separate system (library, compatibility verdict from bone-name overlap, application via `play_clip` behaviors) — see issues doc E8.
@@ -139,6 +143,14 @@ Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. C
 ## Snapshot archive
 
 _Superseded SNAPSHOT bodies, verbatim, newest first. Not orientation material._
+
+### Pre-2026-10-07 (planning: Track P, content delivery)
+
+Phase: Phase 5 → Room P0s; this project is **Release 1** — the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-03 — editor fix session: Scenes screen + scene import (#33), persistent NPC models + one placement rule (#35, SHARED #53/#54), left panel as 3 sections (SHARED #56), E6 ghost dialog fixed (#55), Anim tab lists every kit + New Kit binds the NPC (#58/#59). **E12 (gizmo drives the model) is SHARED #57, open, review re-run pending.** R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
+Working: the editor composes scenes (placed GLBs, NPCs shown as models you can move / rotate / scale, pose + anim clips from any kit, zones, spawn, ambient audio); `/scenes` lists, opens, imports (ZIP → Dexie) and deletes; room player plays NPC clips with the same placement rule; FPV menu; headless Mixamo FBX→GLB.
+Broken: **nothing placed is solid** (P0-1) · zones exported but `loadRoom()` never reads them (P0-2) · **E11: "first click lost" on T/R/S and tabs not reproduced** (ghost dialog + small targets fixed; needs owner's window size + what a failed click does) · no path / animation triggers or narrative (E7/E8) · FPV head clipping on Tab · swimming clips unconfirmed · camera-relative movement.
+Blocker: terrain surface-normal API not exposed (uphill lean).
+Next: merge SHARED #57 once CI is green; then **E7-a/b** (scene-level named paths: storage, preview, speed) and the **E8 Behaviors** design, which must also settle clip compatibility (owner asked 2026-10-03: separate library / compatibility / apply-on-trigger system, not multi-pack per NPC — recommended); then **P0-2 zones → P0-1 Stage A**. Owed: owner's visual pass, E11 repro detail, a 2-NPC-one-asset browser check. D4 (what "release" ships) open.
 
 ### Pre-2026-10-03 close (editor fix session, mid-session)
 
