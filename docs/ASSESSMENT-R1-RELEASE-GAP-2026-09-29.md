@@ -121,6 +121,19 @@ Sum of the sizes above, as a **range** (inferred, sessions not dates): **≈ 28�
 
 Steps 1–3 are already the queued engine work and unchanged.
 
+**Amended 2026-10-07: content-delivery slices queued** ([`PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md`](PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md)).
+The plan adds a build stage between the authored scene and the runtime, so a room filled with objects does not cost
+one parse, one draw call and one cold shader per placement. The steps slot in as follows:
+**CD-0** Sandbox loader fix (any time, XS) · after step 1: **CD-M** measure a rich fixture → **CD-1** load once per
+asset → **CD-2** shader warm-up · inside step 2: **CD-4** colliders from the same dedupe, plus a solid-air/holes
+measure as the acceptance check · after step 3: **CD-3** runtime batching, **only if CD-M shows draw-call bound**.
+CD-5 (NPC crowd instancing) and CD-6 (bake at export) are parked with re-entry conditions in the plan.
+
+**Amended 2026-10-07: editor Track P (prompt panel) queued ahead of E7 paths** (owner;
+[`../../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`](../../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md)). The
+working order is now: SHARED #57 → **PP-1 … PP-6** → E7-a/b → E8 → P0-2 (+ CD-M/1/2) → P0-1 (+ CD-4). PP-1
+absorbs the deferred undo stack (H-1), and PP-3 is the first author of placement attachments (Track G).
+
 ## 9. Decisions
 
 | # | Decision | Recommendation |
