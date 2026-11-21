@@ -1,0 +1,9 @@
+# INBOX
+
+Work items from outside the repo: owner notes, mail, other sessions. The owner closes lines. Close a line by changing
+`[ ]` to `[x]` and adding `closed: <date> <what was done>`. Never delete lines.
+
+- [ ] 6da6e942 · 2026-11-21 · decision · World Labs is retiring Marble and the Marble/World API on 2027-01-08 (service notice, Gmail 1a1fb6ccc3ef3d86). The owner may have a test account. Marble roughly matches what the asset-delivery pipeline needed (image/text → 3D scene). Owner: check the account for any assets worth exporting before 01-08 · state: open (re-entry: before 2027-01-08) · src: gmail 2026-11-21
+- [ ] a7a5be01 · 2026-11-21 · research · World Labs **Atlas** (atlas.worldlabs.ai, Marble's successor), sold as a "world model" that builds a 3D world from renders. Find out what it ingests and what it outputs (splats? meshes? GLB? an API?), the licence and price, and match that against this engine's scene/asset pipeline (`PLAN-SCENE-CONTENT-DELIVERY`, L0 asset gate, R1 release gap) to name the gap · state: open · src: owner 2026-11-21
+- [ ] 9e55a0c3 · 2026-11-21 · research · Read gessa.ai "three-js-games-with-ai" guide: which AI-assisted Three.js game workflow it proposes, and what we can borrow for the editor prompt panel (Track P) · state: open · src: owner 2026-11-21
+- [ ] 4b1c7e2d · 2026-11-21 · research · Evaluate Rogue Engine (rogueengine.io/GetStarted), a Three.js-based game editor: its editor model, scene format and export, and how it compares with our editor decomposition (L0/L1/L2) and R1 scope; adopt, borrow or skip · state: open · src: owner 2026-11-21
