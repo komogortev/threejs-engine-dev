@@ -1,11 +1,11 @@
 # STATE.md — threejs-engine-dev
 
 ## SNAPSHOT
-Phase: Phase 5 → Room P0s; this project is **Release 1**, the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-10-07 — **Track P** queued ahead of E7 (`../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`) and **PP-1 shipped** in SHARED #63 (multi-step undo/redo for every scene edit) + #64 (placed-object registry); content-delivery slices CD-0..CD-4 queued (`docs/PLAN-SCENE-CONTENT-DELIVERY-2026-10-07.md`). R1 gap: 3 of 13 built, 3 partial, 7 not. | Stack: Vue 3 + @base Three.js harness
-Working: the editor composes scenes (placed GLBs, NPC models you move / rotate / scale, pose + clips from any kit, zones, spawn, ambient audio) with Ctrl+Z / Ctrl+Shift+Z across all of it; `/scenes` lists, opens, imports, deletes; room player plays NPC clips; FPV menu; headless FBX→GLB.
-Broken: **nothing placed is solid** (P0-1) · zones never read by `loadRoom()` (P0-2) · Sandbox skips Draco/Meshopt GLBs (plain `GLTFLoader`, CD-0) · each placement parsed separately, no shader warm-up (CD-1/2) · E11 first-click not reproduced · no paths / behaviors / narrative (E7/E8) · FPV head clipping.
+Phase: Phase 5 → Room P0s; this project is **Release 1**, the manual scene + narrative tool (`docs/architecture/02-story-to-world-vision.md`) | Last: 2026-11-22 — **prompt-built scene trial** (#50): a Claude session drove `/editor?editordebug` (SHARED #68 `__editorApi`), built a scene from a prompt, saved it and played it in `/room`. Friction list = PP-3/PP-4/PP-6 evidence. | Stack: Vue 3 + @base Three.js harness
+Working: the editor composes scenes (placed GLBs, NPC models, pose + clips, zones, spawn, ambient audio) with multi-step undo; Claude can build one from a browser pane (`__editorApi`); `/scenes` lists, opens, imports, deletes; room player replays saved scenes + NPC clips; headless FBX→GLB.
+Broken: **nothing placed is solid** (P0-1) · zones never read by `loadRoom()` (P0-2) · no furniture/prop content at all (trial authored primitives) · no light entity · Sandbox skips Draco/Meshopt (CD-0) · deployed `/editor` crashes · no paths / behaviors / narrative (E7/E8).
 Blocker: terrain surface-normal API not exposed (uphill lean).
-Next: **PP-2…PP-6** (PP-1 ✅) → E7-a/b → E8 (+ clip compatibility) → P0-2 (+ CD-M/1/2) → P0-1 Stage A (+ CD-4); CD-0 any time. Owed: owner visual pass, E11 repro, 2-NPC-one-asset check. D4 open.
+Next: PP-3 placement words (+ group move, room-shell command) → PP-4 staged review → PP-6 on-demand snapshot → PP-5 → E7/E8 → P0-2 → P0-1; a starter prop kit (CD). Owed: owner visual pass, E11 repro. D4 open.
 History: older snapshots in `## Snapshot archive` at the end of this file; full history in git.
 
 ---
@@ -76,6 +76,8 @@ Both harness and three-dreams use `GameplaySceneModule` from `@base/gameplay`. C
 ## Decision Log
 
 <!-- Append-only. One line per decision, newest first. -->
+
+- **2026-11-22** — **World-building format = Claude drives the running editor, then save → replay; not code-written worlds** (owner). Trial passed end to end (#50, SHARED #68). Why the next slices: the cost was content (no props, so primitives were authored) and seeing the result (hidden pane stops rendering), not placement; coordinates were bounds arithmetic in words like *facing / beside / in the corner* → PP-3, then PP-4 staged review, PP-6 snapshot.
 
 - **2026-10-07** — **Track P: Claude edits the scene from an in-editor chat panel, ahead of E7** (owner). Why: manual scene building is slow. Claude proposes through scene commands and a scene description; the gate vetoes, Claude checks a screenshot, the owner accepts or rejects each item and accepted changes are one undo step. PP-1 (one routing point for every edit) absorbs the deferred undo stack H-1. Plan: `../docs/PLAN-EDITOR-PROMPT-PANEL-2026-10-07.md`.
 
